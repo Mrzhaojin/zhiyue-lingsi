@@ -8,11 +8,16 @@ export function safeJsonParse<T>(value: string | null): T | undefined {
 }
 
 export function readStorage<T>(key: string, fallback: T): T {
+  if (typeof window === 'undefined' || !localStorage) {
+    return fallback
+  }
   const parsed = safeJsonParse<T>(localStorage.getItem(key))
   return parsed ?? fallback
 }
 
 export function writeStorage<T>(key: string, value: T): void {
-  localStorage.setItem(key, JSON.stringify(value))
+  if (typeof window !== 'undefined' && localStorage) {
+    localStorage.setItem(key, JSON.stringify(value))
+  }
 }
 

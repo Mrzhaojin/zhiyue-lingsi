@@ -38,10 +38,16 @@ import {
   RequireAuth,
   RequirePermission,
 } from './modules/auth/client'
+import { ensureDbInitialized } from './data/db'
+import { useEffect } from 'react'
 
 function App() {
   useApplyTheme()
   const authBaseUrl = import.meta.env.VITE_AUTH_BASE_URL ?? ''
+
+  useEffect(() => {
+    ensureDbInitialized()
+  }, [])
 
   return (
     <AuthProvider config={{ baseUrl: authBaseUrl, persistAccessToken: true }}>
