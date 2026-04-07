@@ -7,10 +7,23 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
+# 忽略构建产物
+dist/
 dist-ssr
+build/
+out/
+
+# 忽略依赖
+node_modules/
+
+# 忽略缓存与日志
+.vite/
+.trae/
 *.local
+
+# 忽略环境变量
+.env
+.env.local
 
 # Editor directories and files
 .vscode/*
