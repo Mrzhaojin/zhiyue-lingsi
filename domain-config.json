@@ -1,0 +1,21 @@
+{
+  "domainApplication": {
+    "status": "pending",
+    "projectName": "trae_lp4gnfym",
+    "vercelProjectId": "trae_lp4gnfym",
+    "recommendedDomains": [
+      "read-forum.app",
+      "readforum.app",
+      "book-discuss.app"
+    ],
+    "applicationSteps": [
+      "登录 Vercel 控制台",
+      "选择项目 trae_lp4gnfym",
+      "进入 Settings > Domains 页面",
+      "输入选择的域名并点击 Add",
+      "按照 Vercel 提供的 DNS 记录配置域名解析",
+      "等待域名验证完成"
+    ],
+    "vercelConsoleUrl": "https://vercel.com/dashboard"
+  }
+}

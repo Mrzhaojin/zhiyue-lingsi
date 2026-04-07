@@ -1,0 +1,87 @@
+:root {
+  --bg: #fcfbf9; /* 奶白/米白底色 */
+  --bg-gradient: linear-gradient(135deg, #fcfbf9 0%, #f0f5f2 100%);
+  --card: #ffffff; /* 纯白卡片 */
+  --surface: #ffffff;
+  --surface-2: #f7f5f2; /* 燕麦米/淡亚麻 */
+
+  --text: #6b6e6b; /* 淡亚麻灰正文 */
+  --text-h: #3d403d; /* 深亚麻灰标题 */
+  --muted: #b2b8b4;
+
+  --border: rgba(61, 64, 61, 0.05);
+  --border-hover: rgba(61, 64, 61, 0.1);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.02);
+  --shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.04);
+
+  --radius-sm: 16px;
+  --radius: 24px;
+  --radius-lg: 32px;
+
+  --accent: #a3c2b5; /* 浅薄荷绿 */
+  --accent-bg: #f0f5f2; /* 浅薄荷绿背景 */
+  --accent-border: #d4e3dc;
+
+  --danger: #d4a5a5; /* 更柔和的红 */
+  --danger-bg: #fdf5f5;
+  --success: #a3c2b5;
+  --success-bg: #f0f5f2;
+
+  color-scheme: light;
+  font-family: 'PingFang SC Light', 'Source Han Sans CN Light', 'Hiragino Sans GB', 'Source Han Sans SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif;
+  font-weight: 300; /* 轻盈感 */
+  line-height: 1.65; /* 增加行高，提升呼吸感 */
+}
+
+html[data-theme='dark'] {
+  --bg: #1a1b1a;
+  --bg-gradient: linear-gradient(135deg, #1a1b1a 0%, #222524 100%);
+  --card: #222322;
+  --surface: #222322;
+  --surface-2: #2a2c2a;
+
+  --text: #9da39d;
+  --text-h: #d1d6d1;
+  --muted: #6b6e6b;
+
+  --border: rgba(209, 214, 209, 0.05);
+  --border-hover: rgba(209, 214, 209, 0.1);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+  --accent: #8ba89d;
+  --accent-bg: rgba(139, 168, 157, 0.12);
+  --accent-border: rgba(139, 168, 157, 0.2);
+
+  --danger: #bf8b8b;
+  --danger-bg: rgba(191, 139, 139, 0.12);
+  --success: #8ba89d;
+  --success-bg: rgba(139, 168, 157, 0.12);
+
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-gradient);
+  background-attachment: fixed;
+  color: var(--text);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+#root {
+  min-height: 100svh;
+}
