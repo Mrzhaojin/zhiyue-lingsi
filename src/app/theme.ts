@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { getCurrentUser } from '../data/db'
 
 function applyTheme() {
+  if (typeof window === 'undefined') return
   const user = getCurrentUser()
   const mode = user.settings.theme
   const root = document.documentElement
@@ -13,6 +14,7 @@ function applyTheme() {
 
 export function useApplyTheme() {
   useEffect(() => {
+    if (typeof window === 'undefined') return
     applyTheme()
     const media = window.matchMedia?.('(prefers-color-scheme: dark)')
     if (!media) return

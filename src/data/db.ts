@@ -49,7 +49,7 @@ function now() {
   return Date.now()
 }
 
-function migrateToV4(input: any): Database {
+function migrateToV4(input: Partial<Database>): Database {
   const db = input as Database
   db.version = 4
   if (!db.shelves) db.shelves = {}
@@ -1188,10 +1188,36 @@ The valley of ashes is bounded on one side by a small foul river, and, when the 
 }
 
 function readDb(): Database {
-  const stored = readStorage<any>(STORAGE_KEY, null)
+  if (typeof window === 'undefined') {
+    return {
+      version: 4,
+      users: {},
+      currentUserId: '',
+      books: {},
+      posts: {},
+      comments: {},
+      notes: {},
+      tags: {},
+      interactions: {},
+      bookmarks: {},
+      readingHistory: {},
+      vocab: {},
+      notifications: {},
+      shelves: {},
+      aiChatThreads: {},
+      aiChatMessages: {},
+      aiAnalysisRecords: {},
+      admin: {
+        pinnedPostIds: [],
+        featuredPostIds: [],
+        bannedKeywords: ['赌博', '色情', '违法', '诈骗']
+      }
+    }
+  }
+  const stored = readStorage<{ version?: number } | null>(STORAGE_KEY, null)
   if (!stored) return createSeedDb()
   if (stored.version === 3) {
-    const migrated = migrateToV4(stored)
+    const migrated = migrateToV4(stored as Partial<Database>)
     if (ensureSciFiTopicSeed(migrated) || ensureMissingSeedBooks(migrated)) {
       writeDb(migrated)
     } else {
@@ -1200,7 +1226,7 @@ function readDb(): Database {
     return migrated
   }
   if (stored.version !== 4) return createSeedDb()
-  const normalized = migrateToV4(stored)
+  const normalized = migrateToV4(stored as Partial<Database>)
   if (ensureSciFiTopicSeed(normalized) || ensureMissingSeedBooks(normalized)) {
     writeDb(normalized)
   }
@@ -1221,6 +1247,39 @@ export function getDbSnapshot(): Database {
 }
 
 export function getCurrentUser(): User {
+  if (typeof window === 'undefined') {
+    return {
+      id: '',
+      role: 'user',
+      nickname: '',
+      avatarUrl: undefined,
+      bio: '',
+      profileTag: '',
+      createdAt: Date.now(),
+      stats: {
+        readingMinutes: 0,
+        postsCount: 0,
+        notesCount: 0,
+        followersCount: 0,
+        followingCount: 0
+      },
+      settings: {
+        theme: 'system',
+        reading: {
+          fontSize: 18,
+          lineHeight: 1.7,
+          textColor: '#111827',
+          backgroundColor: '#ffffff',
+          fontFamily: 'sans'
+        },
+        notifications: {
+          like: true,
+          comment: true,
+          collect: true
+        }
+      }
+    }
+  }
   const db = readDb()
   const user = db.users[db.currentUserId]
   if (!user) {
