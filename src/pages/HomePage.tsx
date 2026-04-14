@@ -1,8 +1,10 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { getAdminConfig, getDbSnapshot, listNotes, listPosts, listBooks } from '../data/db'
+import { getAdminConfig, getDbSnapshot, listNotes, listPosts, listBooks, toggleInteraction } from '../data/db'
 import { formatTime } from '../lib/format'
 import { BookCover } from '../components/BookCover'
-import { Search, MessageCircle, ThumbsUp, FileText, BookOpen } from 'lucide-react'
+import { Search, MessageCircle, ThumbsUp, FileText, BookOpen, Star } from 'lucide-react'
+import { useToast } from '../ui/useToast'
+import { useAuth } from '../modules/auth/client/AuthProvider'
 
 function getAvatarColor(id: string) {
   const colors = ['#a3c2b5', '#b2c8d4', '#d4c8b2', '#c8b2d4', '#b2d4c8', '#d4b2b2', '#e2a3a3', '#a3b2e2'];
@@ -17,6 +19,9 @@ type FeedItem =
 
 export function HomePage() {
   const navigate = useNavigate()
+  const toast = useToast()
+  const { state } = useAuth()
+  const user = state.status === 'authenticated' ? state.user : null
   const admin = getAdminConfig()
   const db = getDbSnapshot()
   const allBooks = listBooks()
@@ -119,7 +124,15 @@ export function HomePage() {
                   <div className="card-sub">{p.contentText.slice(0, 56)}...</div>
                   <div className="card-meta">
                     <span className="row gap" style={{ gap: '4px' }}><MessageCircle size={14} /> {p.stats.comments}</span>
-                    <span className="row gap" style={{ gap: '4px' }}><ThumbsUp size={14} /> {p.stats.likes}</span>
+                    <button className="btn sm" style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'transparent', border: 'none', padding: '2px 4px', cursor: 'pointer' }} onClick={(e) => {
+                      e.stopPropagation()
+                      if (user) {
+                        toggleInteraction(user.id, 'like', 'post', p.id)
+                        toast.push('已点赞', 'success')
+                      }
+                    }}>
+                      <ThumbsUp size={14} /> {p.stats.likes}
+                    </button>
                     <span className="row gap" style={{ gap: '4px' }}>浏览 {p.stats.views}</span>
                   </div>
                 </Link>
@@ -208,7 +221,24 @@ export function HomePage() {
                     </div>
                     <div className="card-meta" style={{ marginTop: 0 }}>
                       <span className="row gap" style={{ gap: '4px' }}><MessageCircle size={14} /> {p.stats.comments}</span>
-                      <span className="row gap" style={{ gap: '4px' }}><ThumbsUp size={14} /> {p.stats.likes}</span>
+                      <button className="btn sm" style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'transparent', border: 'none', padding: '2px 4px', cursor: 'pointer' }} onClick={(e) => {
+                        e.stopPropagation()
+                        if (user) {
+                          toggleInteraction(user.id, 'like', 'post', p.id)
+                          toast.push('已点赞', 'success')
+                        }
+                      }}>
+                        <ThumbsUp size={14} /> {p.stats.likes}
+                      </button>
+                      <button className="btn sm" style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'transparent', border: 'none', padding: '2px 4px', cursor: 'pointer' }} onClick={(e) => {
+                        e.stopPropagation()
+                        if (user) {
+                          toggleInteraction(user.id, 'collect', 'post', p.id)
+                          toast.push('已收藏', 'success')
+                        }
+                      }}>
+                        <Star size={14} /> {p.stats.collects}
+                      </button>
                     </div>
                   </div>
                 </Link>
@@ -268,9 +298,25 @@ export function HomePage() {
                     ))}
                   </div>
                   <div className="card-meta" style={{ marginTop: 0 }}>
-                    <span className="row gap" style={{ gap: '4px' }}><ThumbsUp size={14} /> {n.stats.likes}</span>
-                    <span className="row gap" style={{ gap: '4px' }}>收藏 {n.stats.collects}</span>
-                  </div>
+                      <button className="btn sm" style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'transparent', border: 'none', padding: '2px 4px', cursor: 'pointer' }} onClick={(e) => {
+                        e.stopPropagation()
+                        if (user) {
+                          toggleInteraction(user.id, 'like', 'note', n.id)
+                          toast.push('已点赞', 'success')
+                        }
+                      }}>
+                        <ThumbsUp size={14} /> {n.stats.likes}
+                      </button>
+                      <button className="btn sm" style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'transparent', border: 'none', padding: '2px 4px', cursor: 'pointer' }} onClick={(e) => {
+                        e.stopPropagation()
+                        if (user) {
+                          toggleInteraction(user.id, 'collect', 'note', n.id)
+                          toast.push('已收藏', 'success')
+                        }
+                      }}>
+                        <Star size={14} /> {n.stats.collects}
+                      </button>
+                    </div>
                 </div>
               </Link>
             )

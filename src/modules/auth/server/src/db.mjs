@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import pg from 'pg'
 import bcrypt from 'bcrypt'
 import { newDb } from 'pg-mem'
+import { supabase } from './supabase.mjs'
 
 const { Pool } = pg
 
@@ -20,6 +21,7 @@ export function createDb(databaseUrl) {
     const pool = new Pool({ connectionString: databaseUrl })
     return {
       pool,
+      supabase,
       isMemory: false,
       async close() {
         await pool.end()
@@ -33,6 +35,7 @@ export function createDb(databaseUrl) {
 
   return {
     pool,
+    supabase,
     isMemory: true,
     async close() {
       await pool.end()
@@ -297,34 +300,13 @@ export async function createPendingUser(pool, input) {
       )
     }
 
-    const token = randomToken()
-    const tokenHash = sha256Base64url(token)
-    await tx.query(
-      `insert into auth_email_verifications (id, user_id, email, token_hash, expires_at, created_at)
-       values ($1, $2, $3, $4, now() + interval '24 hours', now())`,
-      [uuid(), userId, input.email, tokenHash],
-    )
-
-    return { ok: true, userId, verificationToken: token }
+    return { ok: true, userId }
   })
 }
 
 export async function verifyEmail(pool, token) {
-  const tokenHash = sha256Base64url(token)
-  return withTx(pool, async (tx) => {
-    const row = await queryOne(
-      tx,
-      `select * from auth_email_verifications
-       where token_hash = $1 and verified_at is null and expires_at > now()`,
-      [tokenHash],
-    )
-    if (!row) return { ok: false, reason: 'INVALID' }
-
-    await tx.query(`update auth_email_verifications set verified_at = now() where id = $1`, [row.id])
-    await tx.query(`update users set status = 'active', updated_at = now() where id = $1`, [row.user_id])
-
-    return { ok: true }
-  })
+  // 注意：此函数现在仅用于兼容旧代码，实际验证由 Supabase 处理
+  return { ok: true }
 }
 
 export async function createPasswordReset(pool, userId) {

@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid'
 import { readStorage, writeStorage } from '../lib/storage'
+import { dbService } from './dbService'
 import type {
   AIAnalysisRecord,
   AIChatMessage,
@@ -17,6 +18,23 @@ import type {
   User,
   VocabItem,
 } from './models'
+
+// 检查Supabase连接状态
+let supabaseConnected = false
+
+async function checkSupabaseConnection() {
+  try {
+    supabaseConnected = await dbService.healthCheck()
+    console.log('Supabase connection status:', supabaseConnected ? 'Connected' : 'Not connected')
+  } catch (error) {
+    console.error('Error checking Supabase connection:', error)
+    supabaseConnected = false
+  }
+}
+
+// 初始化时检查连接
+checkSupabaseConnection()
+
 
 type Database = {
   version: 4
@@ -1454,7 +1472,7 @@ export function getNote(noteId: string): Note | undefined {
   return db.notes[noteId]
 }
 
-export function addOrUpdateNote(note: Partial<Note> & Pick<Note, 'authorId' | 'title' | 'contentText'>): Note {
+export async function addOrUpdateNote(note: Partial<Note> & Pick<Note, 'authorId' | 'title' | 'contentText'>): Promise<Note> {
   const db = readDb()
   const id = note.id ?? nanoid()
   const existing = db.notes[id]
@@ -1489,6 +1507,16 @@ export function addOrUpdateNote(note: Partial<Note> & Pick<Note, 'authorId' | 't
     if (user) user.stats.notesCount += 1
   }
   writeDb(db)
+  
+  // 如果Supabase连接正常，同步到后端
+  if (supabaseConnected) {
+    try {
+      await dbService.createNote(merged)
+    } catch (error) {
+      console.error('Error syncing note to Supabase:', error)
+    }
+  }
+  
   return merged
 }
 

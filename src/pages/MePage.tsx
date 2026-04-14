@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom'
-import { getCurrentUser, getDbSnapshot, getUnreadNotificationCount, listPublishedNotesByUser } from '../data/db'
+import { getDbSnapshot, getUnreadNotificationCount, listPublishedNotesByUser } from '../data/db'
 import { ChevronRightIcon } from '../ui/ChevronRightIcon'
 import { BookOpen, Bookmark, Leaf, Bell, Settings, Shield, MessageSquareText, Sparkles } from 'lucide-react'
+import { useAuth } from '../modules/auth/client/AuthProvider'
 
 export function MePage() {
-  const user = getCurrentUser()
+  const { state } = useAuth()
+  const user = state.status === 'authenticated' ? { ...state.user, stats: (state.user as any).stats || { readingMinutes: 0, followersCount: 0 }, email: (state.user as any).email } : { id: '', username: 'Guest', nickname: 'Guest', profileTag: '', bio: '', stats: { readingMinutes: 0, followersCount: 0 }, role: 'user', email: undefined }
   const db = getDbSnapshot()
   const myPosts = Object.values(db.posts).filter((p) => p.authorId === user.id).length
   const myNotes = listPublishedNotesByUser(user.id).length
@@ -18,31 +20,31 @@ export function MePage() {
             width: '80px', 
             height: '80px', 
             borderRadius: '50%', 
-            background: 'var(--accent-bg)',
-            color: 'var(--accent)',
+            background: 'var(--accent)',
+            color: 'white',
             fontSize: '32px',
             display: 'grid',
             placeItems: 'center',
             border: '2px solid #fff',
             boxShadow: 'var(--shadow)'
           }}>
-            {user.nickname.slice(0, 1)}
+            {user.username.charAt(0).toUpperCase()}
           </div>
           <div className="profile-main">
             <div className="row space" style={{ gap: '12px', alignItems: 'baseline' }}>
-              <div className="profile-name" style={{ fontSize: '22px', fontWeight: 500 }}>{user.nickname}</div>
+              <div className="profile-name" style={{ fontSize: '22px', fontWeight: 500 }}>{user.username}</div>
               <Link className="mini-action" to="/me/profile" aria-label="编辑个人资料">
                 编辑
               </Link>
             </div>
-            {user.profileTag ? (
+            {user.email ? (
               <div style={{ marginTop: '8px' }}>
                 <span className="chip" style={{ fontSize: '10px', padding: '2px 10px', background: 'var(--accent-bg)', color: 'var(--accent)' }}>
-                  {user.profileTag}
+                  {user.email}
                 </span>
               </div>
             ) : null}
-            <div className="muted" style={{ marginTop: '6px', fontSize: '12px', fontWeight: 300 }}>{user.bio ?? '探索知识的边界，记录思考的瞬间'}</div>
+            <div className="muted" style={{ marginTop: '6px', fontSize: '12px', fontWeight: 300 }}>探索知识的边界，记录思考的瞬间</div>
           </div>
         </div>
         

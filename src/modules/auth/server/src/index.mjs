@@ -8,6 +8,10 @@ import pinoHttp from 'pino-http'
 import bcrypt from 'bcrypt'
 import crypto from 'node:crypto'
 import swaggerUi from 'swagger-ui-express'
+import dotenv from 'dotenv'
+
+// 加载环境变量
+dotenv.config()
 
 import { getConfig } from './config.mjs'
 import {
@@ -85,6 +89,20 @@ app.use(
 )
 
 async function initDb() {
+  // 使用Supabase初始化数据库
+  try {
+    // 检查Supabase连接
+    const { data, error } = await db.supabase.auth.getUser()
+    if (error) {
+      logger.warn('Supabase connection check failed:', error.message)
+    } else {
+      logger.info('Supabase connection established')
+    }
+  } catch (error) {
+    logger.warn('Error checking Supabase connection:', error.message)
+  }
+  
+  // 继续使用原有的数据库初始化逻辑
   await ensureAuthSchema(db.pool)
   if (db.isMemory) {
     await ensureDevSeed(db.pool)
@@ -144,140 +162,183 @@ app.post(
   async (req, res) => {
     const { identifier, password, remember } = req.body ?? {}
     try {
+      req.log.info('Login request received:', { identifier })
       requireBodyFields(req.body, ['identifier', 'password'])
 
-      const user = await getUserByIdentifier(db.pool, String(identifier))
-      if (!user) {
-        await insertLoginLog(db.pool, {
-          identifier,
-          ip: ipOf(req),
-          userAgent: req.headers['user-agent'],
-          success: false,
-          reason: 'NOT_FOUND',
-        })
-        return res.status(401).json({ code: 'UNAUTHORIZED', message: '账号或密码错误' })
-      }
+      // 检查 Supabase 配置是否正确
+      const hasValidSupabaseConfig = config.supabaseUrl && config.supabaseServiceKey && !config.supabaseUrl.includes('your-project')
 
-      if (user.locked_until && new Date(user.locked_until).getTime() > Date.now()) {
+      if (hasValidSupabaseConfig) {
+        // 使用 Supabase 进行登录验证
+        req.log.info('Using Supabase for login validation')
+        const { data, error } = await db.supabase.auth.signInWithPassword({
+          email: String(identifier),
+          password: String(password)
+        })
+
+        if (error) {
+          req.log.error('Supabase signInWithPassword error:', error)
+          if (error.code === 'user_not_found' || error.code === 'invalid_credentials') {
+            await insertLoginLog(db.pool, {
+              identifier,
+              ip: ipOf(req),
+              userAgent: req.headers['user-agent'],
+              success: false,
+              reason: 'BAD_CREDENTIALS',
+            })
+            return res.status(401).json({ code: 'UNAUTHORIZED', message: '账号或密码错误' })
+          }
+          if (error.code === 'email_not_confirmed') {
+            await insertLoginLog(db.pool, {
+              identifier,
+              ip: ipOf(req),
+              userAgent: req.headers['user-agent'],
+              success: false,
+              reason: 'PENDING',
+            })
+            return res.status(403).json({ code: 'FORBIDDEN', message: '账号未激活，请先完成邮箱验证' })
+          }
+          return res.status(500).json({ code: 'INTERNAL_ERROR', message: '登录失败，请稍后重试' })
+        }
+
+        const user = data.user
+        if (!user) {
+          return res.status(401).json({ code: 'UNAUTHORIZED', message: '账号或密码错误' })
+        }
+
         await insertLoginLog(db.pool, {
           userId: user.id,
           identifier,
           ip: ipOf(req),
           userAgent: req.headers['user-agent'],
-          success: false,
-          reason: 'LOCKED',
+          success: true,
+          reason: 'OK',
         })
-        return res.status(423).json({ code: 'LOCKED', message: '登录失败次数过多，已锁定15分钟' })
-      }
 
-      if (user.status === 'banned') {
-        const until = user.banned_until ? new Date(user.banned_until).getTime() : null
-        if (!until || until > Date.now()) {
+        // 生成 JWT tokens
+        const rbac = await getUserRolesAndPermissions(db.pool, user.id)
+        const access = jwtService.signAccessToken({
+          userId: user.id,
+          roles: rbac.roles,
+          permissions: rbac.permissions,
+        })
+        const refresh = jwtService.signRefreshToken({ userId: user.id })
+        const tokenHash = jwtService.hashTokenForStorage(refresh.token)
+
+        await saveRefreshToken(db.pool, {
+          userId: user.id,
+          tokenHash,
+          jti: refresh.jti,
+          userAgent: req.headers['user-agent'],
+          ip: ipOf(req),
+          expiresAt: refresh.expiresAt,
+        })
+
+        setRefreshCookie(res, refresh.token, Boolean(remember))
+
+        res.json({
+          user: {
+            id: user.id,
+            username: user.user_metadata?.username || user.email,
+            email: user.email ?? undefined,
+            status: 'active',
+            roles: rbac.roles,
+            permissions: rbac.permissions,
+            createdAt: new Date(user.created_at).toISOString(),
+            updatedAt: new Date(user.updated_at).toISOString(),
+          },
+          tokens: { accessToken: access.token, accessTokenExpiresAt: access.expMs },
+        })
+      } else {
+        // Supabase 配置不正确，使用模拟数据
+        req.log.info('Using mock login (no valid Supabase config)')
+        // 检查用户是否存在
+        const user = await getUserByIdentifier(db.pool, String(identifier))
+        if (!user) {
+          await insertLoginLog(db.pool, {
+            identifier,
+            ip: ipOf(req),
+            userAgent: req.headers['user-agent'],
+            success: false,
+            reason: 'NOT_FOUND',
+          })
+          return res.status(401).json({ code: 'UNAUTHORIZED', message: '账号或密码错误' })
+        }
+
+        // 检查用户状态
+        if (user.status === 'pending') {
           await insertLoginLog(db.pool, {
             userId: user.id,
             identifier,
             ip: ipOf(req),
             userAgent: req.headers['user-agent'],
             success: false,
-            reason: 'BANNED',
+            reason: 'PENDING',
           })
-          return res.status(403).json({ code: 'BANNED', message: '账号已被封禁' })
+          return res.status(403).json({ code: 'FORBIDDEN', message: '账号未激活，请先完成邮箱验证' })
         }
-      }
 
-      if (user.status === 'pending') {
+        // 验证密码
+        const ok = await jwtService.verifyPassword(String(password), user.password_hash)
+        if (!ok) {
+          await insertLoginLog(db.pool, {
+            userId: user.id,
+            identifier,
+            ip: ipOf(req),
+            userAgent: req.headers['user-agent'],
+            success: false,
+            reason: 'BAD_PASSWORD',
+          })
+          return res.status(401).json({ code: 'UNAUTHORIZED', message: '账号或密码错误' })
+        }
+
+        // 登录成功
         await insertLoginLog(db.pool, {
           userId: user.id,
           identifier,
           ip: ipOf(req),
           userAgent: req.headers['user-agent'],
-          success: false,
-          reason: 'PENDING',
-        })
-        return res.status(403).json({ code: 'FORBIDDEN', message: '账号未激活，请先完成邮箱验证' })
-      }
-
-      const ok = await jwtService.verifyPassword(String(password), user.password_hash)
-      if (!ok) {
-        await withTx(db.pool, async (tx) => {
-          await tx.query(
-            `update users
-             set failed_login_count = failed_login_count + 1,
-                 locked_until = case
-                   when failed_login_count + 1 >= 5 then now() + interval '15 minutes'
-                   else locked_until
-                 end,
-                 updated_at = now()
-             where id = $1`,
-            [user.id],
-          )
+          success: true,
+          reason: 'OK',
         })
 
-        await insertLoginLog(db.pool, {
+        // 生成 JWT tokens
+        const rbac = await getUserRolesAndPermissions(db.pool, user.id)
+        const access = jwtService.signAccessToken({
           userId: user.id,
-          identifier,
-          ip: ipOf(req),
-          userAgent: req.headers['user-agent'],
-          success: false,
-          reason: 'BAD_PASSWORD',
-        })
-
-        return res.status(401).json({ code: 'UNAUTHORIZED', message: '账号或密码错误' })
-      }
-
-      await withTx(db.pool, async (tx) => {
-        await tx.query(
-          `update users set failed_login_count = 0, locked_until = null, last_login_at = now(), updated_at = now()
-           where id = $1`,
-          [user.id],
-        )
-      })
-
-      const rbac = await getUserRolesAndPermissions(db.pool, user.id)
-      const access = jwtService.signAccessToken({
-        userId: user.id,
-        roles: rbac.roles,
-        permissions: rbac.permissions,
-      })
-      const refresh = jwtService.signRefreshToken({ userId: user.id })
-      const tokenHash = jwtService.hashTokenForStorage(refresh.token)
-
-      await saveRefreshToken(db.pool, {
-        userId: user.id,
-        tokenHash,
-        jti: refresh.jti,
-        userAgent: req.headers['user-agent'],
-        ip: ipOf(req),
-        expiresAt: refresh.expiresAt,
-      })
-
-      setRefreshCookie(res, refresh.token, Boolean(remember))
-
-      await insertLoginLog(db.pool, {
-        userId: user.id,
-        identifier,
-        ip: ipOf(req),
-        userAgent: req.headers['user-agent'],
-        success: true,
-        reason: 'OK',
-      })
-
-      res.json({
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email ?? undefined,
-          phone: user.phone ?? undefined,
-          status: user.status,
           roles: rbac.roles,
           permissions: rbac.permissions,
-          createdAt: new Date(user.created_at).toISOString(),
-          updatedAt: new Date(user.updated_at).toISOString(),
-        },
-        tokens: { accessToken: access.token, accessTokenExpiresAt: access.expMs },
-      })
+        })
+        const refresh = jwtService.signRefreshToken({ userId: user.id })
+        const tokenHash = jwtService.hashTokenForStorage(refresh.token)
+
+        await saveRefreshToken(db.pool, {
+          userId: user.id,
+          tokenHash,
+          jti: refresh.jti,
+          userAgent: req.headers['user-agent'],
+          ip: ipOf(req),
+          expiresAt: refresh.expiresAt,
+        })
+
+        setRefreshCookie(res, refresh.token, Boolean(remember))
+
+        res.json({
+          user: {
+            id: user.id,
+            username: user.username,
+            email: user.email ?? undefined,
+            status: user.status,
+            roles: rbac.roles,
+            permissions: rbac.permissions,
+            createdAt: new Date(user.created_at).toISOString(),
+            updatedAt: new Date(user.updated_at).toISOString(),
+          },
+          tokens: { accessToken: access.token, accessTokenExpiresAt: access.expMs },
+        })
+      }
     } catch (e) {
-      req.log.error(e)
+      req.log.error('Login error:', e)
       const code = e?.code === 'VALIDATION_ERROR' ? 'VALIDATION_ERROR' : 'INTERNAL_ERROR'
       const status = code === 'VALIDATION_ERROR' ? 400 : 500
       res.status(status).json({ code, message: code === 'VALIDATION_ERROR' ? String(e.message) : '服务异常' })
@@ -444,12 +505,46 @@ app.post('/api/v1/auth/register', async (req, res) => {
     if (!em.includes('@')) return res.status(400).json({ code: 'VALIDATION_ERROR', message: '邮箱格式不正确' })
     if (pw.length < 8) return res.status(400).json({ code: 'VALIDATION_ERROR', message: '密码至少8位' })
 
-    const passwordHash = await bcrypt.hash(pw, 12)
-    const created = await createPendingUser(db.pool, { username: u, email: em, passwordHash })
-    if (!created.ok) return res.status(409).json({ code: 'CONFLICT', message: '用户名或邮箱已存在' })
+    // 检查 Supabase 配置是否正确
+    const hasValidSupabaseConfig = config.supabaseUrl && config.supabaseServiceKey && !config.supabaseUrl.includes('your-project')
 
-    if (config.env !== 'production') {
-      req.log.info({ userId: created.userId }, `DEV verification token: ${created.verificationToken}`)
+    if (hasValidSupabaseConfig) {
+      // 使用 Supabase 进行注册，自动发送邮箱验证邮件
+      const { data, error } = await db.supabase.auth.signUp({
+        email: em,
+        password: pw,
+        options: {
+          data: {
+            username: u
+          }
+        }
+      })
+
+      if (error) {
+        if (error.code === 'user_already_exists') {
+          return res.status(409).json({ code: 'CONFLICT', message: '邮箱已被注册' })
+        }
+        req.log.error('Supabase signUp error:', error)
+        return res.status(500).json({ code: 'INTERNAL_ERROR', message: '注册失败，请稍后重试' })
+      }
+    } else {
+      // Supabase 配置不正确，使用模拟数据
+      req.log.info('Using mock registration (no valid Supabase config)')
+      // 检查用户名和邮箱是否已存在
+      const existing = await getUserByIdentifier(db.pool, u)
+      if (existing) {
+        return res.status(409).json({ code: 'CONFLICT', message: '用户名或邮箱已存在' })
+      }
+      const existingEmail = await getUserByIdentifier(db.pool, em)
+      if (existingEmail) {
+        return res.status(409).json({ code: 'CONFLICT', message: '邮箱已被注册' })
+      }
+      // 创建用户（模拟）
+      const passwordHash = await bcrypt.hash(pw, 12)
+      const created = await createPendingUser(db.pool, { username: u, email: em, passwordHash })
+      if (!created.ok) {
+        return res.status(409).json({ code: 'CONFLICT', message: '用户名或邮箱已存在' })
+      }
     }
 
     res.json({ ok: true })
@@ -465,8 +560,18 @@ app.post('/api/v1/auth/register/verify', async (req, res) => {
   try {
     const { token } = req.body ?? {}
     requireBodyFields(req.body, ['token'])
-    const result = await verifyEmail(db.pool, String(token))
-    if (!result.ok) return res.status(400).json({ code: 'VALIDATION_ERROR', message: '激活链接无效或已过期' })
+    
+    // 使用 Supabase 验证邮箱
+    const { data, error } = await db.supabase.auth.verifyOtp({
+      token: String(token),
+      type: 'email'
+    })
+
+    if (error) {
+      req.log.error('Supabase verifyOtp error:', error)
+      return res.status(400).json({ code: 'VALIDATION_ERROR', message: '激活链接无效或已过期' })
+    }
+
     res.json({ ok: true })
   } catch (e) {
     req.log.error(e)
@@ -603,6 +708,15 @@ app.use((req, res) => {
   res.status(404).json({ code: 'NOT_FOUND', message: '接口不存在' })
 })
 
+// 全局错误处理中间件
+app.use((err, req, res, next) => {
+  logger.error(err)
+  const status = err.status || 500
+  const code = err.code || 'INTERNAL_ERROR'
+  const message = err.message || '服务异常'
+  res.status(status).json({ code, message })
+})
+
 initDb()
   .then(() => {
     app.listen(config.port, () => {
@@ -611,5 +725,8 @@ initDb()
   })
   .catch((e) => {
     logger.error(e)
-    process.exit(1)
+    // 优雅退出，给服务器时间处理完当前请求
+    setTimeout(() => {
+      process.exit(1)
+    }, 1000)
   })

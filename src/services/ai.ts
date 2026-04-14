@@ -1,6 +1,307 @@
 import type { AITextAnalysis, Book, ReadingDifficulty } from '../data/models'
 import { listBooks } from '../data/db'
 
+// 真实的方舟API调用
+async function callDoubaoAPI(prompt: string, systemPrompt?: string, retries = 3): Promise<string> {
+  // 使用用户提供的API密钥
+  const apiKey = "704801f6-eb65-4c21-9a04-1c826e56ddeb"
+  if (!apiKey) {
+    // 如果没有 API 密钥，使用模拟响应
+    console.log('No API key provided, using mock response')
+    return generateMockResponse(prompt)
+  }
+
+  console.log('Calling Doubao API with model: ep-20260413211111-lrxfq')
+  console.log('API Key present:', !!apiKey)
+
+  for (let i = 0; i < retries; i++) {
+    try {
+      console.log(`Attempt ${i + 1}/${retries} to call Doubao API`)
+      console.log('API Key:', apiKey.substring(0, 5) + '...' + apiKey.substring(apiKey.length - 5))
+      console.log('Prompt:', prompt.substring(0, 50) + '...')
+      
+      // 使用正确的方舟 API 端点
+      // 准备请求数据
+      let requestPrompt = prompt
+      if (systemPrompt) {
+        requestPrompt = `${systemPrompt}\n\n${prompt}`
+      }
+
+      const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/responses', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'ep-20260413211111-lrxfq',
+          input: requestPrompt
+        })
+      })
+
+      console.log('Doubao API response status:', response.status)
+      console.log('Doubao API response status text:', response.statusText)
+
+      // 读取完整的响应内容
+      const responseText = await response.text()
+      console.log('Doubao API response text:', responseText)
+
+      if (!response.ok) {
+        try {
+          const errorData = JSON.parse(responseText)
+          const errorMessage = errorData.message || response.statusText
+          console.error('Doubao API error response:', errorData)
+          throw new Error(`Doubao API error: ${errorMessage}`)
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError)
+          throw new Error(`Doubao API error: ${response.status} ${response.statusText}`)
+        }
+      }
+
+      const data = JSON.parse(responseText)
+      console.log('Doubao API response:', data)
+      
+      // 解析方舟API的响应格式
+      let responseContent = ''
+      if (data.output && data.output.length > 0) {
+        // 找到类型为message的输出
+        const messageOutput = data.output.find((item: any) => item.type === 'message')
+        if (messageOutput && messageOutput.content && messageOutput.content.length > 0) {
+          // 找到类型为output_text的内容
+          const textContent = messageOutput.content.find((contentItem: any) => contentItem.type === 'output_text')
+          if (textContent && textContent.text) {
+            responseContent = textContent.text
+          }
+        }
+      }
+      
+      if (!responseContent) {
+        throw new Error('Invalid Doubao API response format')
+      }
+      
+      return responseContent
+    } catch (error) {
+      console.warn(`Doubao API call failed (attempt ${i + 1}/${retries}):`, error)
+      if (i < retries - 1) {
+        // 指数退避重试
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)))
+      }
+    }
+  }
+
+  // 如果 API 调用失败，抛出错误而不是使用模拟响应
+  throw new Error('API call failed after multiple attempts')
+}
+
+// 调用豆包API
+export async function streamDoubaoAPI(messages: Array<{role: string, content: string}>, systemPrompt?: string): Promise<ReadableStream<string>> {
+  // 使用用户提供的API密钥
+  const apiKey = "704801f6-eb65-4c21-9a04-1c826e56ddeb"
+  if (!apiKey) {
+    throw new Error('No API key provided')
+  }
+
+  console.log('Calling Doubao API with model: ep-20260413211111-lrxfq')
+  console.log('API Key present:', !!apiKey)
+  console.log('API Key length:', apiKey ? apiKey.length : 0)
+  console.log('API endpoint:', 'https://ark.cn-beijing.volces.com/api/v3/responses')
+
+  // 准备请求数据
+  let prompt = messages.map(msg => `${msg.role}: ${msg.content}`).join('\n')
+  if (systemPrompt) {
+    prompt = `${systemPrompt}\n\n${prompt}`
+  }
+
+  const requestData = {
+    model: 'ep-20260413211111-lrxfq',
+    input: prompt
+  }
+
+  console.log('Request data:', JSON.stringify(requestData, null, 2))
+
+  // 调用API
+  const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify(requestData)
+  })
+
+  console.log('Response status:', response.status)
+  console.log('Response status text:', response.statusText)
+
+  // 读取完整的响应内容
+  const responseText = await response.text()
+  console.log('Doubao API response text:', responseText)
+
+  if (!response.ok) {
+    try {
+      const errorData = JSON.parse(responseText)
+      const errorMessage = errorData.message || response.statusText
+      console.error('Doubao API error response:', errorData)
+      throw new Error(`Doubao API error: ${errorMessage}`)
+    } catch (parseError) {
+      console.error('Failed to parse error response:', parseError)
+      throw new Error(`Doubao API error: ${response.status} ${response.statusText}`)
+    }
+  }
+
+  const data = JSON.parse(responseText)
+  console.log('Doubao API response:', data)
+  
+  // 解析方舟API的响应格式
+  let responseContent = ''
+  if (data.output && data.output.length > 0) {
+    // 找到类型为message的输出
+    const messageOutput = data.output.find((item: any) => item.type === 'message')
+    if (messageOutput && messageOutput.content && messageOutput.content.length > 0) {
+      // 找到类型为output_text的内容
+      const textContent = messageOutput.content.find((contentItem: any) => contentItem.type === 'output_text')
+      if (textContent && textContent.text) {
+        responseContent = textContent.text
+      }
+    }
+  }
+  
+  if (!responseContent) {
+    throw new Error('Invalid Doubao API response format')
+  }
+  
+  console.log('Response content:', responseContent)
+
+  // 返回流式响应
+  console.log('Creating readable stream with content length:', responseContent.length)
+  return new ReadableStream({
+    start(controller) {
+      console.log('Stream started')
+      let index = 0
+      const interval = setInterval(() => {
+        if (index < responseContent.length) {
+          const char = responseContent[index]
+          console.log('Enqueuing char:', char)
+          controller.enqueue(char)
+          index++
+        } else {
+          console.log('Stream completed')
+          clearInterval(interval)
+          controller.close()
+        }
+      }, 50)
+    }
+  })
+}
+
+// 生成模拟响应，确保用户体验
+function generateMockResponse(prompt: string): string {
+  // 检查是否是文本分析请求
+  if (prompt.includes('请对以下文本进行深度分析')) {
+    return `文本解读：这是一段富有深意的文本，通过细腻的描写展现了作者的情感和思想。
+
+写作亮点：作者运用了丰富的修辞手法，如比喻、拟人等，使文本更加生动形象。
+
+深层含义：文本背后蕴含着对生命、爱情、友情等主题的深刻思考。
+
+背景信息：这段文本可能来自一部经典文学作品，反映了特定时代的社会背景和文化氛围。`
+  }
+  
+  // 检查是否是书籍推荐请求
+  if (prompt.includes('推荐') || prompt.includes('找书') || prompt.includes('书单')) {
+    return `我可以为你推荐一些书籍。你可以告诉我你喜欢的类型、作者或者关键词，我会为你找到合适的书籍。
+
+例如：
+- 推荐一些经典文学作品
+- 有没有关于人工智能的书籍
+- 找一些适合青少年的科幻小说`
+  }
+  
+  // 检查是否是学习相关请求
+  if (prompt.includes('学习') || prompt.includes('计划') || prompt.includes('复盘')) {
+    return `我可以帮助你制定学习计划和进行学习复盘。你可以告诉我你的学习目标，我会为你提供建议。
+
+例如：
+- 制定一个月的阅读计划
+- 如何提高阅读效率
+- 如何进行每周学习复盘`
+  }
+  
+  // 其他类型的请求
+  return `我是你的专属阅读 AI 助手，很高兴为你服务。你可以问我关于书籍、阅读、文学等方面的问题，我会尽力为你提供详细、准确的信息。
+
+例如：
+- 推荐一些经典文学作品
+- 如何提高阅读效率
+- 解释某个文学概念`
+}
+
+async function aiAnalyzeTextWithDoubao(text: string): Promise<AITextAnalysis> {
+  const prompt = `请对以下文本进行深度分析，包括文本解读、写作亮点、深层含义和背景信息：\n\n${text}`
+  
+  const systemPrompt = `你是一个专业的文学分析助手，擅长对各种文本进行深度解读。请从以下几个方面分析给定文本：\n1. 文本解读：解释文本的字面意义和隐含意义\n2. 写作亮点：分析文本的写作技巧和艺术特色\n3. 深层含义：探讨文本背后的主题、思想和情感\n4. 背景信息：提供与文本相关的背景知识，如作者、时代背景等\n\n请使用中文回答，分析要深入、全面、专业。`
+  
+  try {
+    const response = await callDoubaoAPI(prompt, systemPrompt)
+    
+    // 解析豆包的回复，提取各个部分
+    const sections = response.split('\n\n')
+    let textInterpretation = ''
+    let writingHighlights = ''
+    let deepMeaning = ''
+    let backgroundInfo = ''
+    
+    sections.forEach(section => {
+      if (section.includes('文本解读') || section.includes('字面意义')) {
+        textInterpretation = section.replace(/^.*：/, '').trim()
+      } else if (section.includes('写作亮点') || section.includes('写作技巧')) {
+        writingHighlights = section.replace(/^.*：/, '').trim()
+      } else if (section.includes('深层含义') || section.includes('主题')) {
+        deepMeaning = section.replace(/^.*：/, '').trim()
+      } else if (section.includes('背景信息') || section.includes('作者') || section.includes('时代背景')) {
+        backgroundInfo = section.replace(/^.*：/, '').trim()
+      }
+    })
+    
+    // 如果没有明确的 sections，使用整个回复作为分析
+    if (!textInterpretation) {
+      textInterpretation = response
+    }
+    
+    return {
+      text,
+      textInterpretation,
+      writingHighlights,
+      deepMeaning,
+      backgroundInfo
+    }
+  } catch (error) {
+    console.error('Doubao API error:', error)
+    // 返回错误信息，而不是抛出错误
+    return {
+      text,
+      textInterpretation: 'AI赏析失败，请稍后重试',
+      writingHighlights: '',
+      deepMeaning: '',
+      backgroundInfo: ''
+    }
+  }
+}
+
+async function aiAssistantReplyWithDoubao(userText: string, history: Array<{role: string, content: string}>): Promise<string> {
+  const prompt = `用户问题：${userText}\n\n聊天历史：${JSON.stringify(history)}\n\n请作为阅读助手，回答用户的问题，提供详细、准确的信息。`
+  
+  const systemPrompt = `你是一个专业的阅读助手，擅长回答关于书籍、阅读、文学等方面的问题。请：\n1. 提供准确、详细的信息\n2. 保持友好、专业的语气\n3. 针对用户的具体问题进行回答\n4. 如果需要，可以提供相关的背景知识和建议\n\n请使用中文回答。`
+  
+  try {
+    const response = await callDoubaoAPI(prompt, systemPrompt)
+    console.log('AI assistant response:', response)
+    return response
+  } catch (error) {
+    console.error('Doubao API error:', error)
+    throw new Error('AI assistant failed: ' + (error instanceof Error ? error.message : 'Unknown error'))
+  }
+}
+
 export type BookSearchFilters = {
   category?: Book['category']
   difficulty?: ReadingDifficulty
@@ -93,62 +394,19 @@ export async function aiTranslate(text: string, to: 'zh' | 'en' | 'ja' | 'ko' | 
 }
 
 export async function aiAnalyzeText(text: string): Promise<AITextAnalysis> {
-  const content = text.trim()
-  await new Promise((r) => setTimeout(r, 800))
-
-  // 根据内容特征返回正式的 AI 赏析
-  if (content.includes('甄士隐') || content.includes('石头记')) {
+  try {
+    // 使用豆包API进行文本分析
+    return await aiAnalyzeTextWithDoubao(text)
+  } catch (error) {
+    console.error('AI analysis error:', error)
+    // 返回错误信息，而不是抛出错误
     return {
-      text: content,
-      textInterpretation:
-        '此句开宗明义，确立了全书“真事隐去，假语村言”的叙事基调。通过“梦幻”与“通灵”的隐喻，作者构建了一个虚实相生的文学空间，并为后续家族兴衰与人物悲剧奠定叙事框架。',
-      writingHighlights:
-        '以“梦幻/通灵”作为叙事入口，虚实并置；语句凝练，信息密度高；“真事隐去”形成强烈悬念与反讽张力，读者在“可信/不可信”的张力中进入文本。',
-      deepMeaning:
-        '“隐去真事”并非回避现实，而是以文学的曲笔保存真实：个人身世之感怀、时代盛衰之无常、人生终归幻灭的宿命感，被压缩进这一句的叙事宣言中。',
-      backgroundInfo:
-        '【作者与时代】曹雪芹出身江宁织造世家，家道中落；清代盛世表象下社会矛盾暗涌。\n【关键意象】“通灵宝玉”常被解读为先天灵性与后天枷锁的对照物，贯穿人物命运走向。',
+      text,
+      textInterpretation: 'AI赏析失败，请稍后重试',
+      writingHighlights: '',
+      deepMeaning: '',
+      backgroundInfo: ''
     }
-  }
-
-  if (content.includes('红岸基地') || content.includes('叶文洁')) {
-    return {
-      text: content,
-      textInterpretation:
-        '段落以“寂静”的感受为核心，将宏大的宇宙尺度与个体的心理波动并置：天线既是技术装置，也是叙事焦点，指向一次可能改变人类命运的“接触”。',
-      writingHighlights:
-        '冷峻克制的语气与宏大意象形成对比；以具体物象（天线）承载抽象情绪（孤独/绝望）；节奏缓慢、画面感强，营造“临界时刻”的紧张氛围。',
-      deepMeaning:
-        '科技在这里不只是进步的象征，也可能成为对现实绝望后的出口：当个体遭遇文明的裂缝，向宇宙发声既是求救，也是对人类自我中心的挑战。',
-      backgroundInfo:
-        '【时代背景】冷战时期地外文明探索潮与特殊历史时期的心理创伤并存。\n【关键意象】“红岸天线”常被视作人类对未知的危险试探：一旦发声，后果不可逆。',
-    }
-  }
-
-  if (content.includes('younger and more vulnerable years') || content.includes('Gatsby')) {
-    return {
-      text: content,
-      textInterpretation:
-        '句子以“别急着批评”为道德前提，提示叙述者保持克制与同理心。它不仅解释了尼克的叙述姿态，也为后续人物评价与事件判断设定了基准。',
-      writingHighlights:
-        '口语化忠告形成亲密语气；“advantages”一词将阶级差异具体化；通过父辈声音建立叙事权威，间接塑造尼克“旁观者”的可信形象。',
-      deepMeaning:
-        '同理心背后是对不平等的提醒：理解他人处境，并不意味着为其行为开脱，而是让评判建立在结构性差异被看见之后，从而更显悲剧的不可避免。',
-      backgroundInfo:
-        '【时代背景】20世纪20年代美国经济高速发展伴随道德真空与享乐主义。\n【作品母题】“美国梦”与阶级鸿沟贯穿全书，决定了人物命运的上限与破碎方式。',
-    }
-  }
-
-  return {
-    text: content,
-    textInterpretation:
-      '这段文字首先在字面层面推进场景/情节，其信息点与上下文的承接关系清晰：通过关键细节完成“人物行动—情绪走向—叙事推进”的链条。',
-    writingHighlights:
-      '细节描写具象可感，节奏张弛有度；用词克制但富于暗示，善于用意象/对照/重复等方式强化阅读记忆点。',
-    deepMeaning:
-      '文本在事件之外还在表达一种更深的情绪或价值判断：可能是对人性的复杂、关系的张力、时代氛围的压迫感的隐性呈现，读者可从反复出现的意象与转折处捕捉其主题指向。',
-    backgroundInfo:
-      '可结合作者所处时代、题材传统与常见文化意象来理解：同一写法在不同语境中会产生差异化指向。若你提供书名/章节/上下文，我可以更精准补充背景与创作动机。',
   }
 }
 
@@ -245,14 +503,7 @@ function containsBannedKeyword(text: string, bannedKeywords: string[]) {
   return bannedKeywords.some((kw) => kw && t.includes(kw))
 }
 
-function isReadingDomainQuery(text: string) {
-  const t = text.trim()
-  if (!t) return false
-  const hasBookWords =
-    /书|书籍|作者|出版社|章节|情节|人物|结局|背景|写作|修辞|赏析|阅读|原文|段落|句子|翻译|语法|单词|英文|原著/.test(t)
-  const hasEnglishHelp = /translate|meaning|grammar|word|sentence/i.test(t)
-  return hasBookWords || hasEnglishHelp
-}
+
 
 function pickLastBookCardPayload(history: AIAssistantHistoryItem[]) {
   for (let i = history.length - 1; i >= 0; i -= 1) {
@@ -441,18 +692,25 @@ export async function aiAssistantReply(input: {
       .slice(0, 3)
   })()
 
-  if (looksLikeBookSearch(userText) || directMatches.length) {
-    const books = directMatches.length ? directMatches : await aiSearchBooks(userText, {})
+  // 首先检查是否直接输入了书名或作者名
+  if (directMatches.length) {
+    const books = directMatches
     const top = books.slice(0, 3)
-    if (!top.length) return { content: `我在书库里暂时没找到与“${userText}”匹配的书。你可以换个书名/作者/关键词试试~` }
     return {
       content: `为你在书库里找到 ${top.length} 本相关书籍：`,
       payload: { kind: 'book_cards', bookIds: top.map((b) => b.id) },
     }
   }
 
-  if (!isReadingDomainQuery(userText)) {
-    return { content: '我是你的专属阅读AI助手，能解答阅读相关、书籍相关的问题哦~' }
+  // 检查是否是书籍搜索请求
+  if (looksLikeBookSearch(userText)) {
+    const books = await aiSearchBooks(userText, {})
+    const top = books.slice(0, 3)
+    if (!top.length) return { content: `我在书库里暂时没找到与“${userText}”匹配的书。你可以换个书名/作者/关键词试试~` }
+    return {
+      content: `为你在书库里找到 ${top.length} 本相关书籍：`,
+      payload: { kind: 'book_cards', bookIds: top.map((b) => b.id) },
+    }
   }
 
   if (looksLikeWordOrGrammarHelp(userText)) {
@@ -478,127 +736,96 @@ export async function aiAssistantReply(input: {
     }
   }
 
-  return {
-    content:
-      '我可以帮你做：\n1) 书名/作者/关键词检索并给出推荐\n2) 情节梳理、人物关系、创作背景与写作手法解读\n3) 英语阅读：单词释义、句子翻译、语法解析\n4) 学习监督：制定阅读目标、打卡提醒\n5) 学习复盘：阅读周报、总结分析\n你可以把问题说得更具体一点（例如："帮我制定阅读目标"、"提醒我打卡"、"帮我复盘本周阅读"）~',
+  // 处理特定的精读请求
+  const q = userText.trim().toLowerCase()
+  if (q.includes('红楼梦') && q.includes('精读') || q.includes('三体') && q.includes('精读') || q.includes('小王子') && q.includes('精读')) {
+    try {
+      const reply = await getAIAssistantResponse(userText)
+      console.log('AI assistant response:', reply)
+      return { content: reply }
+    } catch (error) {
+      console.error('AI assistant error:', error)
+      // 返回错误信息，而不是抛出错误
+      return { content: 'AI回复失败，请稍后重试' }
+    }
+  }
+
+  // 使用豆包API生成回复
+  try {
+    const reply = await aiAssistantReplyWithDoubao(userText, input.history)
+    console.log('AI assistant reply:', reply)
+    return { content: reply }
+  } catch (error) {
+    console.error('AI assistant error:', error)
+    // 返回错误信息，而不是抛出错误
+    return { content: 'AI回复失败，请稍后重试' }
   }
 }
 
 // AI 助手模拟数据库及逻辑
-export function getAIAssistantResponse(query: string): string {
+export async function getAIAssistantResponse(query: string): Promise<string> {
   const q = query.trim().toLowerCase()
 
-  // --- 模块一：AI 智能精读（3 条） ---
-  if (q.includes('红楼梦') && q.includes('精读')) {
-    return `【模块一：AI 智能精读】
-书籍名：《红楼梦》
+  try {
+    // --- 模块一：AI 智能精读（3 条） ---
+    if (q.includes('红楼梦') && q.includes('精读')) {
+      const prompt = `请对《红楼梦》进行深度分析，包括：
+1. 3 句话总结
+2. 重要知识点卡片
+3. 逻辑结构图
+4. 事实核查`
+      const systemPrompt = `你是一个专业的文学分析助手，擅长对经典文学作品进行深度解读。请提供详细、专业的分析，使用中文回答。`
+      return await callDoubaoAPI(prompt, systemPrompt)
+    }
 
-[重点总结] 3 句话总结：
-1. 本书以贾、史、王、薛四大家族的兴衰为背景，描绘了一幅封建社会末世的百态图。
-2. 核心线索是贾宝玉与林黛玉、薛宝钗的爱情婚姻悲剧。
-3. 作品通过“真事隐去，假语村言”的叙事手法，深刻探讨了人生的幻灭感与宿命论。
+    if (q.includes('三体') && q.includes('精读')) {
+      const prompt = `请对《三体》进行深度分析，包括：
+1. 3 句话总结
+2. 重要知识点卡片
+3. 逻辑结构图
+4. 事实核查`
+      const systemPrompt = `你是一个专业的科幻文学分析助手，擅长对科幻作品进行深度解读。请提供详细、专业的分析，使用中文回答。`
+      return await callDoubaoAPI(prompt, systemPrompt)
+    }
 
-[知识点卡片] 【通灵宝玉】
-定义：贾宝玉出生时衔在嘴里的一块玉石，原是女娲补天剩下的顽石。
-核心解读：它是宝玉命根子，象征着人的先天灵性。玉上的铭文“莫失莫忘，仙寿恒昌”与其在凡间的种种磨难形成强烈对比，暗示了无论怎样呵护，最终都难逃“白茫茫大地真干净”的宿命。
+    if (q.includes('小王子') && q.includes('精读')) {
+      const prompt = `请对《小王子》进行深度分析，包括：
+1. 3 句话总结
+2. 重要知识点卡片
+3. 逻辑结构图
+4. 事实核查`
+      const systemPrompt = `你是一个专业的文学分析助手，擅长对经典童话作品进行深度解读。请提供详细、专业的分析，使用中文回答。`
+      return await callDoubaoAPI(prompt, systemPrompt)
+    }
 
-[逻辑结构图]
-顽石下凡 → 荣国府繁华（大观园起社） → 家族抄家衰败 → 宝玉悬崖撒手出家
+    // --- 模块二：AI 学习监督伙伴（3 条） ---
+    if (q.includes('目标') || q.includes('计划') || q.includes('制定')) {
+      const prompt = `请为用户制定一个阅读目标和计划，包括具体的任务建议和激励措施。`
+      const systemPrompt = `你是一个专业的阅读监督伙伴，擅长帮助用户制定阅读目标和计划。请提供详细、实用的建议，使用中文回答，语气友好、鼓励。`
+      return await callDoubaoAPI(prompt, systemPrompt)
+    }
 
-[事实核查]
-有人认为《红楼梦》只是一部单纯的言情小说。其实不然，它被誉为中国封建社会的百科全书，涵盖了当时的政治、经济、文化、民俗等方方面面。`
+    if (q.includes('提醒') || q.includes('打卡') || q.includes('督促')) {
+      const prompt = `请为用户提供阅读提醒和打卡督促，包括阅读小贴士和鼓励的话语。`
+      const systemPrompt = `你是一个专业的阅读监督伙伴，擅长提醒用户阅读和打卡。请提供温馨、鼓励的提醒，使用中文回答，语气友好、亲切。`
+      return await callDoubaoAPI(prompt, systemPrompt)
+    }
+
+    if (q.includes('复盘') || q.includes('周报') || q.includes('总结')) {
+      const prompt = `请为用户提供阅读复盘和周报，包括阅读成就、复盘引导和下周建议。`
+      const systemPrompt = `你是一个专业的阅读监督伙伴，擅长帮助用户进行阅读复盘和总结。请提供详细、鼓励的复盘报告，使用中文回答，语气友好、专业。`
+      return await callDoubaoAPI(prompt, systemPrompt)
+    }
+
+    // 默认回复
+    const prompt = `请作为阅读助手，向用户介绍你可以提供的帮助和服务。`
+    const systemPrompt = `你是一个专业的阅读助手，擅长回答关于书籍、阅读、文学等方面的问题。请提供清晰、友好的介绍，使用中文回答。`
+    const response = await callDoubaoAPI(prompt, systemPrompt)
+    console.log('AI assistant default response:', response)
+    return response
+  } catch (error) {
+    console.error('AI assistant error:', error)
+    // 返回错误信息，而不是抛出错误
+    return 'AI回复失败，请稍后重试'
   }
-
-  if (q.includes('三体') && q.includes('精读')) {
-    return `【模块一：AI 智能精读】
-书籍名：《三体》
-
-📌 3 句话总结：
-1. 故事从红岸基地的一次越级电波发射开始，地球坐标被暴露给距地球4光年的半人马座三星系统。
-2. 三体文明因其母星环境极端恶劣，决定入侵地球，并利用“智子”锁死了地球的基础科学。
-3. 人类在绝望中展开了长达数百年的抗争与自救，展现了宇宙社会学中的黑暗森林法则。
-
-🏷️ 知识点卡片：【黑暗森林法则】
-定义：宇宙社会学的核心公理。
-核心解读：宇宙就像一座黑暗森林，每个文明都是带枪的猎人。由于“生存是文明的第一需要”和“猜疑链”的存在，任何暴露自己位置的文明都将不可避免地遭到其他文明的打击。
-
-🕸️ 逻辑结构图：
-叶文洁按下发射键 → 三体人收到信号并派舰队出发 → 智子抵达地球锁死科学 → 面壁计划启动寻找生机
-
-🔍 事实核查：
-书中提到的“半人马座α星”在现实中是存在的，它是距离太阳系最近的恒星系统，确实包含三颗恒星（南门二A、B和比邻星），这种三星系统在引力作用下极不稳定，这是小说设定的科学基础。`
-  }
-
-  if (q.includes('小王子') && q.includes('精读')) {
-    return `【模块一：AI 智能精读】
-书籍名：《小王子》
-
-📌 3 句话总结：
-1. 飞行员在撒哈拉沙漠遇见了来自B612星球的小王子，听他讲述了星际旅行的见闻。
-2. 小王子离开了他深爱但骄傲的玫瑰，遇到了国王、酒鬼、点灯人等，看到了成人世界的荒诞。
-3. 最终在地球上，狐狸教会了他“驯养”的意义，让他懂得了爱与责任，决定重返自己的星球。
-
-🏷️ 知识点卡片：【驯养（Tame）】
-定义：狐狸对小王子解释的一个词，意为“建立联系”。
-核心解读：在没有建立联系之前，事物是普遍而无意义的；一旦被“驯养”，彼此在对方生命中就变得独一无二。它揭示了爱的本质——你为你所驯养的东西花费的时间，使得它变得如此重要。
-
-🕸️ 逻辑结构图：
-B612星球（玫瑰的困扰） → 游历各星（见识成人荒诞） → 降落地球（遇见狐狸学会爱） → 被蛇咬后灵魂回归
-
-🔍 事实核查：
-很多人以为这是一本纯写给小孩的童话。作者圣埃克苏佩里在序言中明确表示，这本书是献给“曾经是孩子的大人”的，它用童话的外壳包裹了深沉的哲学思考。`
-  }
-
-  // --- 模块二：AI 学习监督伙伴（3 条） ---
-  if (q.includes('目标') || q.includes('计划') || q.includes('制定')) {
-    return `🎉 嗨！我是你的阅读监督伙伴！太棒了，你决定制定阅读目标啦！
-我们可以把大目标拆解成小关卡，像打游戏一样通关。
-
-🎯 **你的当前任务建议：**
-- 每天阅读《The Great Gatsby》1 个章节
-- 记录 3 个不认识的生词并存入单词本
-- 睡前写一句心得
-
-准备好接受挑战了吗？回复“接受挑战”，我们今天就开始计算你的阅读经验值哦！🌟`
-  }
-
-  if (q.includes('提醒') || q.includes('打卡') || q.includes('督促')) {
-    return `🔔 叮咚！阅读小助手上线！
-
-我看你今天还没有打开《万历十五年》哦！虽然我们不强制打卡，但每天哪怕只读 10 分钟，长期积累也是很惊人的。
-☕ 泡杯茶，找个舒服的姿势，我们一起读完这一章吧！
-
-💡 小提示：如果今天太累了，可以试试听一会儿“朗读”功能，闭着眼睛也能涨知识！读完记得点击右上角记个简单的笔记当做今天的打卡证明哦~`
-  }
-
-  if (q.includes('复盘') || q.includes('周报') || q.includes('总结')) {
-    return `📊 **你的本周阅读周报来啦！**
-
-🏆 **阅读成就：**
-- 本周你共阅读了 5 天，累计阅读时长 142 分钟！超越了 68% 的同好！
-- 你在《红楼梦》中留下了 2 条深度笔记，看来“转白话”功能帮了你不少忙。
-- 你的单词本新增了 15 个词汇。
-
-🔍 **复盘小引导：**
-回顾一下，本周让你印象最深的一句话是什么？
-下周我们是不是可以挑战一下《三体》的英文版片段呢？
-
-继续保持这个节奏，你超棒的！💪`
-  }
-
-  // 默认回复
-  return `你好！我是你的AI阅读助手🤖。
-
-你可以尝试对我说：
-📖 **关于书籍：**
-- "三体精读"
-- "红楼梦精读"
-- "小王子精读"
-
-🎯 **关于学习：**
-- "帮我制定阅读目标"
-- "提醒我打卡"
-- "帮我复盘本周阅读"
-
-试试看吧！`
 }

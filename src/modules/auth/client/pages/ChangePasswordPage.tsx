@@ -10,7 +10,7 @@ function normalizeError(e: unknown) {
 }
 
 export function ChangePasswordPage() {
-  const { api } = useAuth()
+  const { changePassword } = useAuth()
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -26,7 +26,7 @@ export function ChangePasswordPage() {
     }
     setSubmitting(true)
     try {
-      await api.changePassword({ currentPassword, newPassword })
+      await changePassword({ currentPassword, newPassword })
       setOk(true)
       setCurrentPassword('')
       setNewPassword('')

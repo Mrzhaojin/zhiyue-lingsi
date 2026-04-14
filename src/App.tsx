@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
-import { MobileShell } from './app/shell/MobileShell'
+import { WebShell } from './app/shell/WebShell'
 import { HomePage } from './pages/HomePage'
 import { BookshelfPage } from './pages/BookshelfPage'
 import { ReadSearchPage } from './pages/ReadSearchPage'
@@ -43,14 +43,13 @@ import { useEffect } from 'react'
 
 function App() {
   useApplyTheme()
-  const authBaseUrl = import.meta.env.VITE_AUTH_BASE_URL ?? ''
 
   useEffect(() => {
     ensureDbInitialized()
   }, [])
 
   return (
-    <AuthProvider config={{ baseUrl: authBaseUrl, persistAccessToken: true }}>
+    <AuthProvider config={{ persistAccessToken: true }}>
       <ToastProvider>
         <Routes>
           <Route path="/zhiyueling-si/login" element={<LoginPage />} />
@@ -61,7 +60,7 @@ function App() {
           <Route path="/auth/register" element={<Navigate to="/zhiyueling-si/register" replace />} />
           <Route path="/auth/forgot" element={<Navigate to="/zhiyueling-si/forgot" replace />} />
           <Route path="/auth/password/change" element={<Navigate to="/zhiyueling-si/password/change" replace />} />
-          <Route element={<RequireAuth><MobileShell /></RequireAuth>}>
+          <Route element={<RequireAuth><WebShell /></RequireAuth>}>
             <Route path="/" element={<HomePage />} />
             <Route path="/shelf" element={<BookshelfPage />} />
             <Route path="/search" element={<SearchPage />} />

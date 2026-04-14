@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { getDbSnapshot, listPosts, listTags, upsertTagByName } from '../data/db'
 import { formatTime } from '../lib/format'
 import { useToast } from '../ui/useToast'
 import { Search, MessageCircle, ThumbsUp } from 'lucide-react'
+import { LoadingSpinner } from '../components/LoadingSpinner'
 
 function getAvatarColor(id: string) {
   const colors = ['#a3c2b5', '#b2c8d4', '#d4c8b2', '#c8b2d4', '#b2d4c8', '#d4b2b2', '#e2a3a3', '#a3b2e2'];
@@ -16,15 +17,37 @@ export function ForumPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const tab = (params.get('tab') ?? 'hot') as 'latest' | 'hot' | 'topics'
-  const db = getDbSnapshot()
-  const posts = tab === 'topics' ? [] : listPosts(tab)
+  const category = params.get('category') ?? 'all'
+  const [loading, setLoading] = useState(true)
+  const [db, setDb] = useState(getDbSnapshot())
+  const [posts, setPosts] = useState(tab === 'topics' ? [] : listPosts(tab))
+  const [tags, setTags] = useState(listTags())
   const [topicQuery, setTopicQuery] = useState('')
-  const tags = listTags()
+  
   const filteredTags = useMemo(() => {
     const q = topicQuery.trim()
     if (!q) return tags
     return tags.filter((t) => t.name.includes(q.startsWith('#') ? q : `#${q}`) || t.name.includes(q))
   }, [tags, topicQuery])
+  
+  const categories = [
+    { id: 'all', name: '全部' },
+    { id: 'discussion', name: '讨论' },
+    { id: 'share', name: '分享' },
+    { id: 'question', name: '问答' },
+    { id: 'news', name: '资讯' }
+  ]
+  
+  useEffect(() => {
+    // 模拟数据加载
+    setLoading(true)
+    setTimeout(() => {
+      setDb(getDbSnapshot())
+      setPosts(tab === 'topics' ? [] : listPosts(tab))
+      setTags(listTags())
+      setLoading(false)
+    }, 500)
+  }, [tab, category])
 
   return (
     <div className="page">
@@ -45,14 +68,14 @@ export function ForumPage() {
         <div className="tabs" style={{ background: 'var(--surface-2)', borderRadius: 'var(--radius-sm)', padding: '4px' }}>
           <button
             className={`tab ${tab === 'hot' ? 'active' : ''}`}
-            onClick={() => setParams({ tab: 'hot' })}
+            onClick={() => setParams({ tab: 'hot', category })}
             style={{ fontWeight: 400, fontSize: '13px' }}
           >
             热门
           </button>
           <button
             className={`tab ${tab === 'latest' ? 'active' : ''}`}
-            onClick={() => setParams({ tab: 'latest' })}
+            onClick={() => setParams({ tab: 'latest', category })}
             style={{ fontWeight: 400, fontSize: '13px' }}
           >
             最新
@@ -65,10 +88,36 @@ export function ForumPage() {
             话题广场
           </button>
         </div>
+        
+        {tab !== 'topics' && (
+          <div className="categories" style={{ marginTop: '16px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                className={`btn sm ${category === cat.id ? 'primary' : ''}`}
+                onClick={() => setParams({ tab, category: cat.id })}
+                style={{
+                  fontSize: '12px',
+                  padding: '6px 12px',
+                  borderRadius: '16px',
+                  border: category === cat.id ? 'none' : '1px solid var(--border)',
+                  background: category === cat.id ? 'var(--accent)' : 'var(--surface-2)',
+                  color: category === cat.id ? '#fff' : 'var(--text)'
+                }}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="section">
-        {tab === 'topics' ? (
+        {loading ? (
+          <div style={{ padding: '60px 0', display: 'flex', justifyContent: 'center' }}>
+            <LoadingSpinner size="large" text="加载中..." />
+          </div>
+        ) : tab === 'topics' ? (
           <>
             <div className="row gap" style={{ marginBottom: '20px', gap: '12px' }}>
               <input
@@ -93,7 +142,7 @@ export function ForumPage() {
             </div>
             <div className="tag-grid" style={{ gap: '16px' }}>
               {filteredTags.map((t) => (
-                <Link key={t.id} className="tag" to={`/forum/topics/${encodeURIComponent(t.name)}`} style={{ padding: '16px', borderRadius: 'var(--radius)', background: 'var(--card)', border: '1px solid var(--border)' }}>
+                <Link key={t.id} className="tag" to={`/forum/topics/${encodeURIComponent(t.name)}`} style={{ padding: '16px', borderRadius: 'var(--radius)', background: 'var(--card)', border: '1px solid var(--border)', transition: 'all 0.3s ease' }}>
                   <div className="tag-icon" aria-hidden="true" style={{ 
                     width: '36px', 
                     height: '36px', 
@@ -121,7 +170,7 @@ export function ForumPage() {
             {posts.map((p) => {
               const author = db.users[p.authorId]
               return (
-                <Link key={p.id} className="card" to={`/forum/${p.id}`} style={{ padding: '20px', borderRadius: 'var(--radius)', background: 'var(--card)', border: '1px solid var(--border)' }}>
+                <Link key={p.id} className="card" to={`/forum/${p.id}`} style={{ padding: '20px', borderRadius: 'var(--radius)', background: 'var(--card)', border: '1px solid var(--border)', transition: 'all 0.3s ease' }}>
                   <div className="row gap" style={{ marginBottom: '16px', gap: '12px' }}>
                     {author?.avatarUrl ? (
                       <img src={author.avatarUrl} alt={author.nickname} style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', background: 'var(--surface-2)' }} />
