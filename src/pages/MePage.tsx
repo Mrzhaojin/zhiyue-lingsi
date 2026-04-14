@@ -2,11 +2,11 @@ import { Link } from 'react-router-dom'
 import { getDbSnapshot, getUnreadNotificationCount, listPublishedNotesByUser } from '../data/db'
 import { ChevronRightIcon } from '../ui/ChevronRightIcon'
 import { BookOpen, Bookmark, Leaf, Bell, Settings, Shield, MessageSquareText, Sparkles } from 'lucide-react'
-import { useAuth } from '../modules/auth/client/AuthProvider'
+import { useAuth } from '../modules/auth/client'
 
 export function MePage() {
   const { state } = useAuth()
-  const user = state.status === 'authenticated' ? { ...state.user, stats: (state.user as any).stats || { readingMinutes: 0, followersCount: 0 }, email: (state.user as any).email } : { id: '', username: 'Guest', nickname: 'Guest', profileTag: '', bio: '', stats: { readingMinutes: 0, followersCount: 0 }, role: 'user', email: undefined }
+  const user = state.status === 'authenticated' ? { ...state.user, stats: (state.user as unknown as { stats: { readingMinutes: number; followersCount: number } }).stats || { readingMinutes: 0, followersCount: 0 }, email: (state.user as unknown as { email: string }).email } : { id: '', username: 'Guest', nickname: 'Guest', profileTag: '', bio: '', stats: { readingMinutes: 0, followersCount: 0 }, role: 'user', email: undefined }
   const db = getDbSnapshot()
   const myPosts = Object.values(db.posts).filter((p) => p.authorId === user.id).length
   const myNotes = listPublishedNotesByUser(user.id).length

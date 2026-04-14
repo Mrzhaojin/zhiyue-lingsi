@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { AuthApiError } from '../types'
-import { useAuth } from '../AuthProvider'
+import { useAuth } from '..'
 
 // 添加CSS动画
 const styles = `

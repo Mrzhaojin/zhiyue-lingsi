@@ -4,7 +4,7 @@ import { addAIChatMessage, addOrUpdateNote, createAIChatThread, listAIChatMessag
 import { BookCover } from './BookCover'
 import { streamDoubaoAPI, type AIAssistantHistoryItem } from '../services/ai'
 import { useToast } from '../ui/useToast'
-import { useAuth } from '../modules/auth/client/AuthProvider'
+import { useAuth } from '../modules/auth/client'
 
 type ChatMessage = {
   id: string

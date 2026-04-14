@@ -34,18 +34,18 @@
   
   <!-- 漂浮的字母 -->
   <g class="floating-letters">
-    <text x="80" y="120" fill="var(--accent)" font-size="24" font-weight="500" style="animation: float 8s infinite ease-in-out;">R</text>
-    <text x="120" y="180" fill="var(--accent)" font-size="20" font-weight="500" style="animation: float 10s infinite ease-in-out 1s;">E</text>
-    <text x="150" y="140" fill="var(--accent)" font-size="22" font-weight="500" style="animation: float 9s infinite ease-in-out 0.5s;">A</text>
-    <text x="180" y="200" fill="var(--accent)" font-size="18" font-weight="500" style="animation: float 11s infinite ease-in-out 1.5s;">D</text>
-    <text x="60" y="250" fill="var(--accent)" font-size="26" font-weight="500" style="animation: float 12s infinite ease-in-out 2s;">B</text>
-    <text x="100" y="300" fill="var(--accent)" font-size="20" font-weight="500" style="animation: float 8.5s infinite ease-in-out 0.8s;">O</text>
-    <text x="130" y="280" fill="var(--accent)" font-size="22" font-weight="500" style="animation: float 9.5s infinite ease-in-out 1.2s;">O</text>
-    <text x="160" y="320" fill="var(--accent)" font-size="19" font-weight="500" style="animation: float 10.5s infinite ease-in-out 1.8s;">K</text>
-    <text x="80" y="380" fill="var(--accent)" font-size="24" font-weight="500" style="animation: float 11.5s infinite ease-in-out 2.2s;">S</text>
-    <text x="120" y="420" fill="var(--accent)" font-size="20" font-weight="500" style="animation: float 9s infinite ease-in-out 0.3s;">F</text>
-    <text x="150" y="390" fill="var(--accent)" font-size="22" font-weight="500" style="animation: float 10s infinite ease-in-out 1.5s;">O</text>
-    <text x="180" y="440" fill="var(--accent)" font-size="18" font-weight="500" style="animation: float 12s infinite ease-in-out 2.5s;">R</text>
+    <text x="80" y="120" fill="#a3c2b5" font-size="24" font-weight="500" style="animation: float 8s infinite ease-in-out;">R</text>
+    <text x="120" y="180" fill="#a3c2b5" font-size="20" font-weight="500" style="animation: float 10s infinite ease-in-out 1s;">E</text>
+    <text x="150" y="140" fill="#a3c2b5" font-size="22" font-weight="500" style="animation: float 9s infinite ease-in-out 0.5s;">A</text>
+    <text x="180" y="200" fill="#a3c2b5" font-size="18" font-weight="500" style="animation: float 11s infinite ease-in-out 1.5s;">D</text>
+    <text x="60" y="250" fill="#a3c2b5" font-size="26" font-weight="500" style="animation: float 12s infinite ease-in-out 2s;">B</text>
+    <text x="100" y="300" fill="#a3c2b5" font-size="20" font-weight="500" style="animation: float 8.5s infinite ease-in-out 0.8s;">O</text>
+    <text x="130" y="280" fill="#a3c2b5" font-size="22" font-weight="500" style="animation: float 9.5s infinite ease-in-out 1.2s;">O</text>
+    <text x="160" y="320" fill="#a3c2b5" font-size="19" font-weight="500" style="animation: float 10.5s infinite ease-in-out 1.8s;">K</text>
+    <text x="80" y="380" fill="#a3c2b5" font-size="24" font-weight="500" style="animation: float 11.5s infinite ease-in-out 2.2s;">S</text>
+    <text x="120" y="420" fill="#a3c2b5" font-size="20" font-weight="500" style="animation: float 9s infinite ease-in-out 0.3s;">F</text>
+    <text x="150" y="390" fill="#a3c2b5" font-size="22" font-weight="500" style="animation: float 10s infinite ease-in-out 1.5s;">O</text>
+    <text x="180" y="440" fill="#a3c2b5" font-size="18" font-weight="500" style="animation: float 12s infinite ease-in-out 2.5s;">R</text>
   </g>
   
   <!-- 飞翔的书1 - 更真实的样式 -->

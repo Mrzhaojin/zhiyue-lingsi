@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { AuthApiError } from '../types'
-import { useAuth } from '../AuthProvider'
+import { useAuth } from '..'
 
 function normalizeError(e: unknown) {
   const err = e as Partial<AuthApiError> | undefined

@@ -37,9 +37,12 @@ export function PostDetailPage() {
 
   // 当postId变化时，重新获取帖子数据
   useEffect(() => {
-    if (postId) {
-      setPost(getPost(postId))
+    const loadPost = () => {
+      if (postId) {
+        setPost(getPost(postId))
+      }
     }
+    loadPost()
   }, [postId])
 
   useEffect(() => {

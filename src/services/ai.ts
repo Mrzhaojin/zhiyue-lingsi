@@ -65,11 +65,11 @@ async function callDoubaoAPI(prompt: string, systemPrompt?: string, retries = 3)
       let responseContent = ''
       if (data.output && data.output.length > 0) {
         // 找到类型为message的输出
-        const messageOutput = data.output.find((item: any) => item.type === 'message')
-        if (messageOutput && messageOutput.content && messageOutput.content.length > 0) {
+        const messageOutput = data.output.find((item: unknown) => typeof item === 'object' && item !== null && 'type' in item && item.type === 'message')
+        if (messageOutput && typeof messageOutput === 'object' && messageOutput !== null && 'content' in messageOutput && Array.isArray(messageOutput.content) && messageOutput.content.length > 0) {
           // 找到类型为output_text的内容
-          const textContent = messageOutput.content.find((contentItem: any) => contentItem.type === 'output_text')
-          if (textContent && textContent.text) {
+          const textContent = messageOutput.content.find((contentItem: unknown) => typeof contentItem === 'object' && contentItem !== null && 'type' in contentItem && contentItem.type === 'output_text')
+          if (textContent && typeof textContent === 'object' && textContent !== null && 'text' in textContent && typeof textContent.text === 'string') {
             responseContent = textContent.text
           }
         }
@@ -155,11 +155,11 @@ export async function streamDoubaoAPI(messages: Array<{role: string, content: st
   let responseContent = ''
   if (data.output && data.output.length > 0) {
     // 找到类型为message的输出
-    const messageOutput = data.output.find((item: any) => item.type === 'message')
-    if (messageOutput && messageOutput.content && messageOutput.content.length > 0) {
+    const messageOutput = data.output.find((item: unknown) => typeof item === 'object' && item !== null && 'type' in item && item.type === 'message')
+    if (messageOutput && typeof messageOutput === 'object' && messageOutput !== null && 'content' in messageOutput && Array.isArray(messageOutput.content) && messageOutput.content.length > 0) {
       // 找到类型为output_text的内容
-      const textContent = messageOutput.content.find((contentItem: any) => contentItem.type === 'output_text')
-      if (textContent && textContent.text) {
+      const textContent = messageOutput.content.find((contentItem: unknown) => typeof contentItem === 'object' && contentItem !== null && 'type' in contentItem && contentItem.type === 'output_text')
+      if (textContent && typeof textContent === 'object' && textContent !== null && 'text' in textContent && typeof textContent.text === 'string') {
         responseContent = textContent.text
       }
     }

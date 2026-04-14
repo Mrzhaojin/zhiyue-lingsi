@@ -4,7 +4,7 @@ import { formatTime } from '../lib/format'
 import { BookCover } from '../components/BookCover'
 import { Search, MessageCircle, ThumbsUp, FileText, BookOpen, Star } from 'lucide-react'
 import { useToast } from '../ui/useToast'
-import { useAuth } from '../modules/auth/client/AuthProvider'
+import { useAuth } from '../modules/auth/client'
 
 function getAvatarColor(id: string) {
   const colors = ['#a3c2b5', '#b2c8d4', '#d4c8b2', '#c8b2d4', '#b2d4c8', '#d4b2b2', '#e2a3a3', '#a3b2e2'];

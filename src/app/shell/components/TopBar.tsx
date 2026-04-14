@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { SearchIcon } from '../../../ui/SearchIcon'
-import { useAuth } from '../../../modules/auth/client/AuthProvider'
+import { useAuth } from '../../../modules/auth/client'
 
 export function TopBar() {
   const navigate = useNavigate()
