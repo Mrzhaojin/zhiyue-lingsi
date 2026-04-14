@@ -10,17 +10,20 @@ export function BookCover(props: {
   className?: string
   alt?: string
 }) {
-  const [failed, setFailed] = useState(false)
   const size = props.size ?? 'md'
   const letter = useMemo(() => (props.book.title || '书').slice(0, 1), [props.book.title])
   const override = resolveBookCoverUrl(props.book)
   const fallback = props.book.coverUrl
   const [src, setSrc] = useState<string | null>(override ?? null)
+  const [failed, setFailed] = useState(false)
   const hasImage = Boolean(src) && !failed
 
   useEffect(() => {
-    setFailed(false)
-    setSrc(override ?? null)
+    const updateCover = () => {
+      setFailed(false)
+      setSrc(override ?? null)
+    }
+    updateCover()
   }, [override])
 
   return (

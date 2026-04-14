@@ -105,7 +105,7 @@ export async function aiAnalyzeTextWithDoubao(text: string): Promise<AITextAnaly
   }
 }
 
-export async function aiAssistantReplyWithDoubao(userText: string, history: any[]): Promise<string> {
+export async function aiAssistantReplyWithDoubao(userText: string, history: Array<{role: string, content: string}>): Promise<string> {
   const prompt = `用户问题：${userText}\n\n聊天历史：${JSON.stringify(history)}\n\n请作为阅读助手，回答用户的问题，提供详细、准确的信息。`
   
   const systemPrompt = `你是一个专业的阅读助手，擅长回答关于书籍、阅读、文学等方面的问题。请：\n1. 提供准确、详细的信息\n2. 保持友好、专业的语气\n3. 针对用户的具体问题进行回答\n4. 如果需要，可以提供相关的背景知识和建议\n\n请使用中文回答。`

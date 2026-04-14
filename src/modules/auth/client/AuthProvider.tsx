@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import React, { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AuthApiError, AuthState, AuthUser, AuthTokens } from './types'
 import { supabase } from '../../../lib/supabase'
 import { clearAccessToken, getAccessToken, setAccessToken } from './tokenStorage'
@@ -23,7 +23,7 @@ type AuthContextValue = {
   hasPermission: (permission: string) => boolean
 }
 
-const AuthContext = createContext<AuthContextValue | null>(null)
+export const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider(props: {
   children: React.ReactNode
@@ -44,7 +44,7 @@ export function AuthProvider(props: {
 
   // 监听 Supabase Auth 状态变化
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: Session | null) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: unknown, session: Session | null) => {
       if (!mounted.current) return
       
       if (session?.user) {
@@ -314,10 +314,4 @@ export function AuthProvider(props: {
   )
 
   return <AuthContext.Provider value={value}>{props.children}</AuthContext.Provider>
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
-  return ctx
 }

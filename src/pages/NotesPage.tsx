@@ -20,7 +20,10 @@ export function NotesPage() {
   const [notes, setNotes] = useState(() => tab === 'draft' ? listDraftNotesByUser(user.id) : listNotes(sort, true))
 
   useEffect(() => {
-    setNotes(tab === 'draft' ? listDraftNotesByUser(user.id) : listNotes(sort, true))
+    const loadNotes = () => {
+      setNotes(tab === 'draft' ? listDraftNotesByUser(user.id) : listNotes(sort, true))
+    }
+    loadNotes()
   }, [tab, sort, user.id])
 
   return (

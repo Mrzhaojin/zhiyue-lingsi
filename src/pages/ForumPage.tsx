@@ -40,13 +40,16 @@ export function ForumPage() {
   
   useEffect(() => {
     // 模拟数据加载
-    setLoading(true)
-    setTimeout(() => {
-      setDb(getDbSnapshot())
-      setPosts(tab === 'topics' ? [] : listPosts(tab))
-      setTags(listTags())
-      setLoading(false)
-    }, 500)
+    const loadData = async () => {
+      setLoading(true)
+      setTimeout(() => {
+        setDb(getDbSnapshot())
+        setPosts(tab === 'topics' ? [] : listPosts(tab))
+        setTags(listTags())
+        setLoading(false)
+      }, 500)
+    }
+    loadData()
   }, [tab, category])
 
   return (

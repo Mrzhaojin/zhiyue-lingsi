@@ -45,7 +45,7 @@ if (supabaseUrl && supabaseAnonKey) {
         select: async () => ({ data: [], error: null })
       })
     })
-  } as any
+  } as unknown as SupabaseClient
 }
 
 export { supabase }

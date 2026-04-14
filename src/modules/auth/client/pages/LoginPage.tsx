@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import type { AuthApiError } from '../types'
-import { useAuth } from '../AuthProvider'
+import { useAuth } from '..'
 import { validateEmail, sanitizeInput } from '../../../../lib/security'
 
 // 添加CSS动画

@@ -1,5 +1,5 @@
 import React from 'react'
-import { useAuth } from './AuthProvider'
+import { useAuth } from '.'
 import { RequireAuth } from './RequireAuth'
 
 export function RequirePermission(props: {

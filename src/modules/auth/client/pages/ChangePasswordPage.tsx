@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import type { AuthApiError } from '../types'
-import { useAuth } from '../AuthProvider'
+import { useAuth } from '..'
 import { RequireAuth } from '../RequireAuth'
 
 function normalizeError(e: unknown) {

@@ -73,7 +73,7 @@ export function MessagesPage() {
         <div className="list">
           {items.map((n) => {
             const to = n.link?.to
-            const Wrapper: any = to ? Link : 'div'
+            const Wrapper: React.ElementType = to ? Link : 'div'
             const props = to ? { to } : {}
             return (
               <Wrapper

@@ -1,4 +1,5 @@
-export { AuthProvider, useAuth } from './AuthProvider'
+export { AuthProvider } from './AuthProvider'
+export { useAuth } from './useAuth'
 export { RequireAuth } from './RequireAuth'
 export { RequirePermission } from './RequirePermission'
 export type { AuthApiError, AuthPermission, AuthRole, AuthState, AuthTokens, AuthUser } from './types'
