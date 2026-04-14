@@ -10,7 +10,7 @@ function normalizeError(e: unknown) {
 }
 
 export function ForgotPasswordPage() {
-  const { api } = useAuth()
+  const { forgotPassword } = useAuth()
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState(false)
@@ -25,7 +25,7 @@ export function ForgotPasswordPage() {
     }
     setSubmitting(true)
     try {
-      await api.forgotPassword({ email: email.trim() })
+      await forgotPassword({ email: email.trim() })
       setOk(true)
     } catch (err) {
       setError(normalizeError(err))

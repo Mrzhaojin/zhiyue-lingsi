@@ -1,6 +1,8 @@
 import { toPng } from 'html-to-image'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import Quill from 'quill'
+import 'quill/dist/quill.snow.css'
 import {
   addOrUpdateNote,
   addPost,
@@ -29,6 +31,8 @@ function readFilesAsDataUrls(files: FileList): Promise<string[]> {
     ),
   )
 }
+
+
 
 function downloadText(filename: string, text: string) {
   const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
@@ -62,6 +66,8 @@ export function NoteEditorPage(props: { mode: 'create' | 'edit' }) {
   const cardRef = useRef<HTMLDivElement | null>(null)
   const fileRef = useRef<HTMLInputElement | null>(null)
   const autoCardDone = useRef(false)
+  const quillContainerRef = useRef<HTMLDivElement>(null!)
+  const quillRef = useRef<Quill | null>(null)
 
   useEffect(() => {
     if (existing) {
@@ -109,6 +115,56 @@ export function NoteEditorPage(props: { mode: 'create' | 'edit' }) {
       toast.push('已保存到本地', 'success')
     })()
   }, [content, params, title, template, cardBg, cardText, font, toast])
+
+  // 初始化 Quill 编辑器
+  useEffect(() => {
+    if (!quillContainerRef.current || quillRef.current) return
+
+    const quill = new Quill(quillContainerRef.current, {
+      theme: 'snow',
+      placeholder: '可摘抄、解读、总结、打卡…',
+      modules: {
+        toolbar: [
+          ['bold', 'italic', 'underline', 'strike'],
+          ['blockquote', 'code-block'],
+          [{ 'header': 1 }, { 'header': 2 }],
+          [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+          [{ 'indent': '-1'}, { 'indent': '+1' }],
+          [{ 'direction': 'rtl' }],
+          [{ 'size': ['small', false, 'large', 'huge'] }],
+          [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+          [{ 'color': [] }, { 'background': [] }],
+          [{ 'font': [] }],
+          [{ 'align': [] }],
+          ['clean']
+        ]
+      }
+    })
+
+    quillRef.current = quill
+
+    // 设置初始内容
+    quill.root.innerHTML = content
+
+    // 监听内容变化
+    const handleTextChange = () => {
+      setContent(quill.root.innerHTML)
+    }
+
+    quill.on('text-change', handleTextChange)
+
+    // 清理函数
+    return () => {
+      quill.off('text-change', handleTextChange)
+    }
+  }, [])
+
+  // 当外部 content 变化时更新编辑器内容
+  useEffect(() => {
+    if (quillRef.current) {
+      quillRef.current.root.innerHTML = content
+    }
+  }, [content])
 
   function parseTags() {
     return tagsInput
@@ -204,12 +260,9 @@ export function NoteEditorPage(props: { mode: 'create' | 'edit' }) {
           </label>
           <label className="field">
             <span className="label">内容</span>
-            <textarea
-              className="textarea"
-              rows={8}
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="可摘抄、解读、总结、打卡…"
+            <div
+              ref={quillContainerRef}
+              style={{ height: '300px', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}
             />
           </label>
           <label className="field">
@@ -315,8 +368,8 @@ export function NoteEditorPage(props: { mode: 'create' | 'edit' }) {
           <div className="row gap wrap">
             <button
               className="btn"
-              onClick={() => {
-                const note = addOrUpdateNote({
+              onClick={async () => {
+                const note = await addOrUpdateNote({
                   id: existing?.id,
                   authorId: user.id,
                   title: title.trim() || '未命名笔记',
@@ -346,7 +399,7 @@ export function NoteEditorPage(props: { mode: 'create' | 'edit' }) {
                 const tags = parseTags()
                 tags.forEach((t) => upsertTagByName(t))
                 const card = await generateCard()
-                const note = addOrUpdateNote({
+                const note = await addOrUpdateNote({
                   id: existing?.id,
                   authorId: user.id,
                   title: title.trim() || '未命名笔记',
@@ -411,41 +464,43 @@ export function NoteEditorPage(props: { mode: 'create' | 'edit' }) {
           <h2 className="h2">分享卡片预览</h2>
           <span className="muted">生成图片后可用于笔记封面与分享</span>
         </div>
-        <div className="card-preview-wrap">
-          <div
-            ref={cardRef}
-            className={`share-card ${template}`}
-            style={{ 
-              ...templateStyles[template],
-              background: cardBg, 
-              color: cardText, 
-              fontFamily: cardFont(),
-              width: '100%',
-              maxWidth: '400px'
-            }}
-          >
-            <div className="sc-top">
-              <div className="sc-badge" style={{ borderColor: 'currentColor', opacity: 0.6 }}>读享 · 智能阅读笔记</div>
-              <div className="sc-title" style={{ fontSize: template === 'literary' ? '24px' : '20px', marginTop: '12px' }}>{title || '未命名笔记'}</div>
-            </div>
-            <div className="sc-content" style={{ 
-              fontSize: '15px', 
-              lineHeight: '1.8', 
-              margin: '20px 0',
-              textAlign: template === 'literary' ? 'center' : 'left'
-            }}>
-              {(content || '').slice(0, 500)}
-            </div>
-            <div className="sc-tags" style={{ justifyContent: template === 'literary' ? 'center' : 'flex-start' }}>
-              {parseTags().slice(0, 4).map((t) => (
-                <span key={t} className="sc-tag" style={{ borderColor: 'currentColor', opacity: 0.7 }}>
-                  {t}
-                </span>
-              ))}
-            </div>
-            <div className="sc-foot" style={{ marginTop: '24px', fontSize: '12px', opacity: 0.5 }}>
-              —— 分享于 {new Date().toLocaleDateString()} · 智阅灵思
-            </div>
+        <div
+          ref={cardRef}
+          className={`share-card ${template}`}
+          style={{ 
+            ...templateStyles[template],
+            background: cardBg, 
+            color: cardText, 
+            fontFamily: cardFont(),
+            width: '100%',
+            maxWidth: '400px'
+          }}
+        >
+          <div className="sc-top">
+            <div className="sc-badge" style={{ borderColor: 'currentColor', opacity: 0.6 }}>读享 · 智能阅读笔记</div>
+            <div className="sc-title" style={{ fontSize: template === 'literary' ? '24px' : '20px', marginTop: '12px' }}>{title || '未命名笔记'}</div>
+          </div>
+          <div className="sc-content" style={{ 
+            fontSize: '15px', 
+            lineHeight: '1.8', 
+            margin: '20px 0',
+            textAlign: template === 'literary' ? 'center' : 'left'
+          }}>
+            {(() => {
+              const tempDiv = document.createElement('div');
+              tempDiv.innerHTML = content || '';
+              return tempDiv.textContent?.slice(0, 500) || '';
+            })()}
+          </div>
+          <div className="sc-tags" style={{ justifyContent: template === 'literary' ? 'center' : 'flex-start' }}>
+            {parseTags().slice(0, 4).map((t) => (
+              <span key={t} className="sc-tag" style={{ borderColor: 'currentColor', opacity: 0.7 }}>
+                {t}
+              </span>
+            ))}
+          </div>
+          <div className="sc-foot" style={{ marginTop: '24px', fontSize: '12px', opacity: 0.5 }}>
+            —— 分享于 {new Date().toLocaleDateString()} · 智阅灵思
           </div>
         </div>
       </section>

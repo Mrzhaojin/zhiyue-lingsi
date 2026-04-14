@@ -1,5 +1,6 @@
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { getCurrentUser, getDbSnapshot, listDraftNotesByUser, listNotes } from '../data/db'
+import { useState, useEffect } from 'react'
+import { getCurrentUser, getDbSnapshot, listDraftNotesByUser, listNotes, toggleInteraction, hasInteraction } from '../data/db'
 import { formatTime } from '../lib/format'
 import { Search, Flame, Clock, ThumbsUp, Star, PenTool } from 'lucide-react'
 
@@ -16,8 +17,11 @@ export function NotesPage() {
   const [params, setParams] = useSearchParams()
   const tab = (params.get('tab') ?? 'published') as 'published' | 'draft'
   const sort = (params.get('sort') ?? 'hot') as 'hot' | 'latest'
+  const [notes, setNotes] = useState(() => tab === 'draft' ? listDraftNotesByUser(user.id) : listNotes(sort, true))
 
-  const notes = tab === 'draft' ? listDraftNotesByUser(user.id) : listNotes(sort, true)
+  useEffect(() => {
+    setNotes(tab === 'draft' ? listDraftNotesByUser(user.id) : listNotes(sort, true))
+  }, [tab, sort, user.id])
 
   return (
     <div className="page">
@@ -179,11 +183,21 @@ export function NotesPage() {
                     })}
                   </div>
                   <div className="card-meta" style={{ marginTop: 0 }}>
-                    <span className="row gap" style={{ gap: '4px' }}>
-                      <ThumbsUp size={12} /> {n.stats.likes}
+                    <span className="row gap" style={{ gap: '4px', cursor: 'pointer' }} onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      toggleInteraction(user.id, 'like', 'note', n.id);
+                      setNotes(tab === 'draft' ? listDraftNotesByUser(user.id) : listNotes(sort, true));
+                    }}>
+                      <ThumbsUp size={12} style={{ color: hasInteraction(user.id, 'like', 'note', n.id) ? '#f59e0b' : undefined }} /> {n.stats.likes}
                     </span>
-                    <span className="row gap" style={{ gap: '4px' }}>
-                      <Star size={12} /> {n.stats.collects}
+                    <span className="row gap" style={{ gap: '4px', cursor: 'pointer' }} onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      toggleInteraction(user.id, 'collect', 'note', n.id);
+                      setNotes(tab === 'draft' ? listDraftNotesByUser(user.id) : listNotes(sort, true));
+                    }}>
+                      <Star size={12} style={{ color: hasInteraction(user.id, 'collect', 'note', n.id) ? '#f59e0b' : undefined }} /> {n.stats.collects}
                     </span>
                   </div>
                 </div>

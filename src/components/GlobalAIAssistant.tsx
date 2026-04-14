@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { addAIChatMessage, addOrUpdateNote, createAIChatThread, getAdminConfig, getCurrentUser, listAIChatMessages, listBooks } from '../data/db'
+import { addAIChatMessage, addOrUpdateNote, createAIChatThread, listAIChatMessages, listBooks } from '../data/db'
 import { BookCover } from './BookCover'
-import { aiAssistantReply, type AIAssistantHistoryItem } from '../services/ai'
+import { streamDoubaoAPI, type AIAssistantHistoryItem } from '../services/ai'
 import { useToast } from '../ui/useToast'
+import { useAuth } from '../modules/auth/client/AuthProvider'
 
 type ChatMessage = {
   id: string
@@ -17,20 +18,39 @@ export function GlobalAIAssistant() {
   const toast = useToast()
   const navigate = useNavigate()
   const location = useLocation()
-  const user = getCurrentUser()
-  const admin = getAdminConfig()
+  const { state } = useAuth()
+  const user = state.status === 'authenticated' ? state.user : null
 
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   const [threadId, setThreadId] = useState<string | null>(() => sessionStorage.getItem('rf_ai_thread_id'))
-  const [messages, setMessages] = useState<ChatMessage[]>(() => [
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content: '你好！我是你的专属阅读AI助手。\n你可以问我：书名/作者/关键词找书、情节梳理、人物关系、创作背景、写作手法、英语阅读（单词释义/翻译/语法）、学习计划制定、学习复盘。',
-      createdAt: Date.now(),
-    },
-  ])
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    const savedMessages = localStorage.getItem('rf_ai_chat_messages')
+    if (savedMessages) {
+      try {
+        return JSON.parse(savedMessages)
+      } catch {
+        // 如果解析失败，使用默认消息
+        return [
+          {
+            id: 'welcome',
+            role: 'assistant' as const,
+            content: '你好！我是你的专属阅读AI助手。\n你可以问我：书名/作者/关键词找书、情节梳理、人物关系、创作背景、写作手法、英语阅读（单词释义/翻译/语法）、学习计划制定、学习复盘。',
+            createdAt: Date.now(),
+          },
+        ]
+      }
+    }
+    return [
+      {
+        id: 'welcome',
+        role: 'assistant' as const,
+        content: '你好！我是你的专属阅读AI助手。\n你可以问我：书名/作者/关键词找书、情节梳理、人物关系、创作背景、写作手法、英语阅读（单词释义/翻译/语法）、学习计划制定、学习复盘。',
+        createdAt: Date.now(),
+      },
+    ]
+  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [position, setPosition] = useState({ x: -20, y: -80 })
   const isDragging = useRef(false)
@@ -63,6 +83,11 @@ export function GlobalAIAssistant() {
       return merged
     })
   }, [threadId])
+
+  // 保存聊天记录到localStorage
+  useEffect(() => {
+    localStorage.setItem('rf_ai_chat_messages', JSON.stringify(messages))
+  }, [messages])
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -119,8 +144,9 @@ export function GlobalAIAssistant() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     const text = input.trim()
-    if (!text) return
+    if (!text || isSubmitting || !user) return
 
+    setIsSubmitting(true)
     const userMsg: ChatMessage = { id: `u_${Date.now()}`, role: 'user', content: text, createdAt: Date.now() }
     setMessages((prev) => [...prev, userMsg])
     setInput('')
@@ -140,28 +166,59 @@ export function GlobalAIAssistant() {
       .slice(-6)
       .map((m) => ({ role: m.role, content: m.content, payload: m.payload }))
 
+    // 创建临时的assistant消息，用于显示加载状态
+    const assistantMsgId = `a_${Date.now()}`
+    const tempAssistantMsg: ChatMessage = {
+      id: assistantMsgId,
+      role: 'assistant',
+      content: '',
+      createdAt: Date.now(),
+    }
+    setMessages((prev) => [...prev, tempAssistantMsg])
+
     void (async () => {
       try {
-        const reply = await aiAssistantReply({ userText: text, history: historyForAi, bannedKeywords: admin.bannedKeywords ?? [] })
-        const assistantMsg: ChatMessage = {
-          id: `a_${Date.now()}`,
-          role: 'assistant',
-          content: reply.content,
-          createdAt: Date.now(),
-          payload: reply.payload,
+        // 准备消息历史，转换为豆包API需要的格式
+        const messagesForApi = historyForAi.map((m) => ({
+          role: m.role,
+          content: m.content
+        }))
+
+        // 调用流式API
+        const stream = await streamDoubaoAPI(messagesForApi)
+        const reader = stream.getReader()
+        let responseContent = ''
+
+        // 逐字读取响应
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          
+          responseContent += value
+          // 更新消息内容
+          setMessages((prev) => prev.map((msg) => 
+            msg.id === assistantMsgId ? { ...msg, content: responseContent } : msg
+          ))
         }
-        setMessages((prev) => [...prev, assistantMsg])
+
+        // 完成后保存消息
         addAIChatMessage({
-          id: assistantMsg.id,
-          createdAt: assistantMsg.createdAt,
+          id: assistantMsgId,
+          createdAt: tempAssistantMsg.createdAt,
           threadId: tId,
           userId: user.id,
           role: 'assistant',
-          content: assistantMsg.content,
-          payload: assistantMsg.payload,
+          content: responseContent,
         })
-      } catch {
+      } catch (error) {
+        console.error('AI回复失败:', error)
+        // 更新消息为错误提示
+        setMessages((prev) => prev.map((msg) => 
+          msg.id === assistantMsgId ? { ...msg, content: 'AI回复失败，请稍后重试' } : msg
+        ))
         toast.push('AI回复失败，请稍后重试', 'error')
+      } finally {
+        setIsSubmitting(false)
       }
     })()
   }
@@ -252,14 +309,19 @@ export function GlobalAIAssistant() {
                 <button
                   className="btn icon"
                   onClick={() => {
-                    setMessages([
+                    const welcomeMsg = [
                       {
                         id: 'welcome',
-                        role: 'assistant',
+                        role: 'assistant' as const,
                         content: '你好！我是你的专属阅读AI助手。\n你可以问我：书名/作者/关键词找书、情节梳理、人物关系、创作背景、写作手法、英语阅读（单词释义/翻译/语法）、学习计划制定、学习复盘。',
                         createdAt: Date.now(),
                       },
-                    ])
+                    ]
+                    setMessages(welcomeMsg)
+                    // 清空localStorage中的聊天记录
+                    localStorage.removeItem('rf_ai_chat_messages')
+                    // 重新保存欢迎消息
+                    localStorage.setItem('rf_ai_chat_messages', JSON.stringify(welcomeMsg))
                   }}
                   style={{
                     border: '1px solid var(--border)',
@@ -396,9 +458,10 @@ export function GlobalAIAssistant() {
                       </button>
                       <button
                         className="btn"
-                        onClick={() => {
+                        onClick={async () => {
+                          if (!user) return
                           const titleBase = msg.content.split('\n')[0]?.slice(0, 18) || 'AI收藏'
-                          const note = addOrUpdateNote({
+                          const note = await addOrUpdateNote({
                             authorId: user.id,
                             title: `AI收藏：${titleBase}`,
                             contentText: msg.content,
@@ -445,17 +508,18 @@ export function GlobalAIAssistant() {
               />
               <button
                 type="submit"
-                disabled={!input.trim()}
+                disabled={!input.trim() || isSubmitting}
                 className="btn primary"
                 style={{
                   borderRadius: '20px',
                   padding: '0 16px',
                   border: 'none',
-                  background: input.trim() ? 'var(--accent)' : 'var(--border)',
+                  background: (input.trim() && !isSubmitting) ? 'var(--accent)' : 'var(--border)',
                   color: '#fff',
+                  cursor: (input.trim() && !isSubmitting) ? 'pointer' : 'not-allowed',
                 }}
               >
-                发送
+                {isSubmitting ? '发送中...' : '发送'}
               </button>
             </form>
           </div>

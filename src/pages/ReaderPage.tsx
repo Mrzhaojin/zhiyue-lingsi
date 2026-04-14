@@ -663,9 +663,9 @@ export function ReaderPage() {
                   </button>
                   <button
                     className="btn primary"
-                    onClick={() => {
+                    onClick={async () => {
                       const combined = `【原文】\n${snippet.text}\n\n【文本解析】\n${snippet.textInterpretation}\n\n【写作亮点】\n${snippet.writingHighlights}\n\n【内容深意】\n${snippet.deepMeaning}\n\n【背景补充】\n${snippet.backgroundInfo}`
-                      const note = addOrUpdateNote({
+                      const note = await addOrUpdateNote({
                         authorId: user.id,
                         title: '句子赏析分享',
                         contentText: combined,
