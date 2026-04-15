@@ -76,37 +76,55 @@ export function AuthProvider(props: {
 
     // 初始化时获取当前用户状态
     const initAuth = async () => {
-      const { data: { user }, error } = await supabase.auth.getUser()
-      if (!mounted.current) return
-      
-      if (error || !user) {
-        clearAccessToken()
-        setState({ status: 'anonymous' })
-      } else {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session) {
-          const authUser: AuthUser = {
-            id: user.id,
-            username: user.user_metadata?.username || user.email || '',
-            email: user.email || undefined,
-            status: 'active', // 默认状态
-            roles: ['user'], // 默认角色
-            permissions: [], // 默认权限
-            createdAt: user.created_at,
-            updatedAt: user.updated_at || user.created_at
-          }
-          
-          const tokens: AuthTokens = {
-            accessToken: session.access_token,
-            accessTokenExpiresAt: (session.expires_at || Math.floor(Date.now() / 1000) + 3600) * 1000
-          }
-          
-          setAccessToken(tokens, props.config?.persistAccessToken ?? false)
-          setState({ status: 'authenticated', user: authUser, tokens })
-        } else {
+      try {
+        // 添加超时处理，防止 Supabase 调用卡住
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Authentication timeout')), 10000)
+        })
+        
+        const { data: { user }, error } = await Promise.race([
+          supabase.auth.getUser(),
+          timeoutPromise
+        ])
+        
+        if (!mounted.current) return
+        
+        if (error || !user) {
           clearAccessToken()
           setState({ status: 'anonymous' })
+        } else {
+          const { data: { session } } = await supabase.auth.getSession()
+          if (!mounted.current) return
+          
+          if (session) {
+            const authUser: AuthUser = {
+              id: user.id,
+              username: user.user_metadata?.username || user.email || '',
+              email: user.email || undefined,
+              status: 'active', // 默认状态
+              roles: ['user'], // 默认角色
+              permissions: [], // 默认权限
+              createdAt: user.created_at,
+              updatedAt: user.updated_at || user.created_at
+            }
+            
+            const tokens: AuthTokens = {
+              accessToken: session.access_token,
+              accessTokenExpiresAt: (session.expires_at || Math.floor(Date.now() / 1000) + 3600) * 1000
+            }
+            
+            setAccessToken(tokens, props.config?.persistAccessToken ?? false)
+            setState({ status: 'authenticated', user: authUser, tokens })
+          } else {
+            clearAccessToken()
+            setState({ status: 'anonymous' })
+          }
         }
+      } catch (error) {
+        console.error('Authentication initialization error:', error)
+        if (!mounted.current) return
+        clearAccessToken()
+        setState({ status: 'anonymous' })
       }
     }
 
@@ -117,7 +135,16 @@ export function AuthProvider(props: {
 
   const refreshMe = useCallback(async () => {
     try {
-      const { data: { user }, error } = await supabase.auth.getUser()
+      // 添加超时处理，防止 Supabase 调用卡住
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Authentication timeout')), 10000)
+      })
+      
+      const { data: { user }, error } = await Promise.race([
+        supabase.auth.getUser(),
+        timeoutPromise
+      ])
+      
       if (!mounted.current) return null
       
       if (error || !user) {
@@ -127,6 +154,8 @@ export function AuthProvider(props: {
       }
       
       const { data: { session } } = await supabase.auth.getSession()
+      if (!mounted.current) return null
+      
       if (!session) {
         clearAccessToken()
         setState({ status: 'anonymous' })
@@ -152,7 +181,8 @@ export function AuthProvider(props: {
       setAccessToken(tokens, props.config?.persistAccessToken ?? false)
       setState({ status: 'authenticated', user: authUser, tokens })
       return authUser
-    } catch {
+    } catch (error) {
+      console.error('Refresh me error:', error)
       if (!mounted.current) return null
       clearAccessToken()
       setState({ status: 'anonymous' })
