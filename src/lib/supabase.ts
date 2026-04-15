@@ -8,7 +8,14 @@ let supabase: SupabaseClient
 
 if (supabaseUrl && supabaseAnonKey) {
   // 使用真实的 Supabase 配置
-  supabase = createClient(supabaseUrl, supabaseAnonKey)
+  supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      storage: window.localStorage,
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true
+    }
+  })
   console.log('Using real Supabase configuration')
 } else {
   // 使用模拟客户端，避免连接到不存在的服务器
