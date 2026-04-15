@@ -22,12 +22,26 @@ export function clearAccessToken() {
 }
 
 export function getAccessToken(): AccessTokenRecord | null {
-  if (inMemory) return inMemory
+  if (inMemory) {
+    // 检查内存中的令牌是否过期
+    if (Date.now() >= inMemory.accessTokenExpiresAt) {
+      inMemory = null
+      return null
+    }
+    return inMemory
+  }
   const accessToken = localStorage.getItem(ACCESS_TOKEN_KEY)
   const expiresAtStr = localStorage.getItem(ACCESS_TOKEN_EXPIRES_AT_KEY)
   if (!accessToken || !expiresAtStr) return null
   const accessTokenExpiresAt = Number(expiresAtStr)
   if (!Number.isFinite(accessTokenExpiresAt)) return null
+  // 检查从localStorage获取的令牌是否过期
+  if (Date.now() >= accessTokenExpiresAt) {
+    // 如果过期，清除localStorage中的令牌
+    localStorage.removeItem(ACCESS_TOKEN_KEY)
+    localStorage.removeItem(ACCESS_TOKEN_EXPIRES_AT_KEY)
+    return null
+  }
   inMemory = { accessToken, accessTokenExpiresAt }
   return inMemory
 }
