@@ -15,6 +15,101 @@ const styles = `
     from { opacity: 0; transform: translateX(30px); }
     to { opacity: 1; transform: translateX(0); }
   }
+  
+  /* 移动端媒体查询 */
+  @media (max-width: 767px) {
+    .login-container {
+      flex-direction: column !important;
+      padding: 20px !important;
+    }
+    
+    .login-left {
+      display: none !important;
+    }
+    
+    .login-right {
+      flex: none !important;
+      padding: 0 !important;
+      width: 100% !important;
+    }
+    
+    .login-card {
+      padding: 32px 16px !important;
+      margin: 0 !important;
+      width: 100% !important;
+      max-width: 100% !important;
+    }
+    
+    .login-card h2 {
+      font-size: 22px !important;
+      margin-bottom: 24px !important;
+    }
+    
+    .login-form {
+      gap: 20px !important;
+    }
+    
+    .login-form input {
+      min-height: 48px !important;
+      font-size: 16px !important;
+      padding: 12px 16px !important;
+    }
+    
+    .login-form label {
+      font-size: 14px !important;
+    }
+    
+    .login-form button[type="submit"] {
+      min-height: 48px !important;
+      padding: 16px !important;
+      font-size: 16px !important;
+      width: 100% !important;
+    }
+    
+    .social-login {
+      flex-direction: row !important;
+      justify-content: space-between !important;
+    }
+    
+    .social-login button {
+      flex: 1 !important;
+      min-height: 48px !important;
+      font-size: 14px !important;
+      margin: 0 4px !important;
+    }
+    
+    .login-links {
+      flex-direction: column !important;
+      align-items: center !important;
+      gap: 12px !important;
+      margin-top: 24px !important;
+    }
+    
+    .login-links a {
+      font-size: 14px !important;
+    }
+    
+    /* 禁止横向滚动 */
+    html, body {
+      overflow-x: hidden !important;
+    }
+  }
+  
+  /* 平板端媒体查询 */
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .login-container {
+      padding: 20px !important;
+    }
+    
+    .login-left,
+    .login-right {
+      padding: 20px !important;
+    }
+    
+    .login-card {
+      padding: 32px !important;
+    }
+  }
 `
 
 // 注入动画样式
@@ -75,14 +170,14 @@ export function LoginPage() {
   }
 
   return (
-    <div style={{ 
+    <div className="login-container" style={{ 
       minHeight: '100vh', 
       display: 'flex', 
       background: 'var(--bg-gradient)',
       backgroundAttachment: 'fixed'
     }}>
       {/* 左侧飞翔的书效果 */}
-      <div style={{ 
+      <div className="login-left" style={{ 
         flex: 1, 
         display: 'flex', 
         alignItems: 'center', 
@@ -130,7 +225,7 @@ export function LoginPage() {
       </div>
       
       {/* 右侧登录表单 */}
-      <div style={{ 
+      <div className="login-right" style={{ 
         flex: 1, 
         display: 'flex', 
         alignItems: 'center', 
@@ -143,7 +238,7 @@ export function LoginPage() {
           maxWidth: '400px',
           animation: 'slideIn 0.8s ease-out'
         }}>
-          <div className="card" style={{ 
+          <div className="login-card card" style={{ 
             padding: '40px', 
             boxShadow: 'var(--shadow-lg)',
             borderRadius: 'var(--radius)',
@@ -155,7 +250,7 @@ export function LoginPage() {
               fontSize: '24px',
               fontWeight: '500'
             }}>登录</h2>
-            <form onSubmit={onSubmit} style={{ 
+            <form className="login-form" onSubmit={onSubmit} style={{ 
               display: 'flex', 
               flexDirection: 'column', 
               gap: '24px'
@@ -266,7 +361,7 @@ export function LoginPage() {
                 <div style={{ flex: 1, height: '1px', background: 'var(--border)' }}></div>
               </div>
               
-              <div style={{ 
+              <div className="social-login" style={{ 
                 display: 'flex', 
                 justifyContent: 'center', 
                 gap: '16px',
@@ -325,7 +420,7 @@ export function LoginPage() {
                 </button>
               </div>
               
-              <div style={{ 
+              <div className="login-links" style={{ 
                 display: 'flex', 
                 justifyContent: 'space-between', 
                 marginTop: '20px',
