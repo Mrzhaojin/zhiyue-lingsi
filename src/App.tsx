@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
 import { WebShell } from './app/shell/WebShell'
+import { MobileShell } from './app/shell/MobileShell'
 import { HomePage } from './pages/HomePage'
 import { BookshelfPage } from './pages/BookshelfPage'
 import { ReadSearchPage } from './pages/ReadSearchPage'
@@ -39,14 +40,26 @@ import {
   RequirePermission,
 } from './modules/auth/client'
 import { ensureDbInitialized } from './data/db'
-import { useEffect } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 
 function App() {
   useApplyTheme()
+  const [isMobile, setIsMobile] = useState(false)
+
+  // 检测屏幕尺寸
+  const checkScreenSize = useCallback(() => {
+    setIsMobile(window.innerWidth < 768)
+  }, [])
 
   useEffect(() => {
     ensureDbInitialized()
-  }, [])
+    checkScreenSize()
+    window.addEventListener('resize', checkScreenSize)
+    return () => window.removeEventListener('resize', checkScreenSize)
+  }, [checkScreenSize])
+
+  // 选择合适的Shell组件
+  const ShellComponent = isMobile ? MobileShell : WebShell
 
   return (
     <AuthProvider config={{ persistAccessToken: true }}>
@@ -60,7 +73,7 @@ function App() {
           <Route path="/auth/register" element={<Navigate to="/zhiyueling-si/register" replace />} />
           <Route path="/auth/forgot" element={<Navigate to="/zhiyueling-si/forgot" replace />} />
           <Route path="/auth/password/change" element={<Navigate to="/zhiyueling-si/password/change" replace />} />
-          <Route element={<RequireAuth><WebShell /></RequireAuth>}>
+          <Route element={<RequireAuth><ShellComponent /></RequireAuth>}>
             <Route path="/" element={<HomePage />} />
             <Route path="/shelf" element={<BookshelfPage />} />
             <Route path="/search" element={<SearchPage />} />
