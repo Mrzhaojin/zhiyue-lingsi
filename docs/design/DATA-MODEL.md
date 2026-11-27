@@ -308,6 +308,19 @@ create table ai_requests (
 );
 create index ai_requests_user_day_idx on ai_requests (user_id, created_at desc);
 
+> 配额扣减用一条带条件的 upsert 完成，避免并发超发：
+>
+> ```sql
+> insert into ai_quota_daily (user_id, day, requests, tokens)
+> values ($1, current_date, 1, $2)
+> on conflict (user_id, day) do update
+>   set requests = ai_quota_daily.requests + 1,
+>       tokens   = ai_quota_daily.tokens + excluded.tokens
+>   where ai_quota_daily.requests < $3 and ai_quota_daily.tokens + excluded.tokens <= $4
+> returning requests, tokens;
+> ```
+> 无返回行 = 超额，BFF 直接 429，不调用模型。
+
 create table ai_quota_daily (
   user_id uuid not null references profiles(id) on delete cascade,
   day date not null,
@@ -363,7 +376,7 @@ create index audit_logs_time_idx on audit_logs (created_at desc);
 | invites | 仅 admin | 仅 admin | 仅 admin | 仅 admin |
 | books / chapters | 所有登录用户 | 仅 admin | 仅 admin | 仅 admin |
 | shelf_items / reading_progress / reading_sessions | 本人 | 本人 | 本人 | 本人 |
-| notes | 本人 | 本人 | 本人 | 本人（软删） |
+| notes | 本人；**已发布（status='published' 且未删）对登录用户可读** | 本人 | 本人 | 本人（软删） |
 | posts | `deleted_at is null` 或本人/admin | 本人 | 本人或 admin | 本人或 admin（软删） |
 | comments | 同 posts | 本人 | 本人或 admin | 本人或 admin |
 | interactions | 本人 | 本人 | 禁止 | 本人 |
@@ -375,7 +388,7 @@ create index audit_logs_time_idx on audit_logs (created_at desc);
 要点：
 
 - 客户端 **不直接写** `ai_requests`/`ai_quota_daily`/`corpus_chunks`，这些只由 BFF 的 service role 写入；
-- `notes` 不公开：已发布笔记通过 `posts(kind='note')` 暴露，读取时用 `security definer` 视图或 BFF 聚合；
+- `notes` 的可见性：本人可读全部；已发布笔记对登录用户可读（引用型帖子的正文来自它，否则会 join 出空内容）；草稿/已删除仅本人可见；
 - 所有 admin 判定用 `profiles.role='admin'`，不要信任 JWT 里的自定义 claim（可被旧 token 过期时间影响）。
 
 ## 4. IndexedDB（本地）结构 v5

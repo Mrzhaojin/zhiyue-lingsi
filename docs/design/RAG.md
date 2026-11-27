@@ -21,6 +21,9 @@
 | 书章节 | 公版/授权内容（`books.source_type != 'excerpt'` 才入索引） | 书/章节变更 |
 | 已发布笔记 | `status='published'` 且未删除 | 发布/编辑/取消发布 |
 
+> `books.source_type` 语义：`public-domain`（公版全文/摘录，可入索引）、`authorized`（已授权，可入索引）、
+> `excerpt`（未核实版权的演示摘录，**不入索引**）。迁移把历史演示书目标为 `excerpt`，人工复核后再改。
+
 不进入索引：草稿、私密笔记、评论、用户资料。
 
 ## 3. 切分（Chunking）
