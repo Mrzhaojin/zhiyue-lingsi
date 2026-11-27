@@ -1,5 +1,9 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { getAdminConfig, getDbSnapshot, listNotes, listPosts, listBooks, toggleInteraction } from '../data/db'
+import { useAdminConfig, useBooks } from '../features/library/queries'
+import { useNotes } from '../features/notes/queries'
+import { usePosts } from '../features/posts/queries'
+import { useProfiles } from '../features/profiles/queries'
+import { useToggleInteraction } from '../features/interactions/queries'
 import { formatTime } from '../lib/format'
 import { BookCover } from '../components/BookCover'
 import { Search, MessageCircle, ThumbsUp, FileText, BookOpen, Star } from 'lucide-react'
@@ -21,29 +25,47 @@ export function HomePage() {
   const navigate = useNavigate()
   const toast = useToast()
   const { state } = useAuth()
-  const user = state.status === 'authenticated' ? state.user : null
-  const admin = getAdminConfig()
-  const db = getDbSnapshot()
-  const allBooks = listBooks()
-  const featured: FeedItem[] = [
-    ...admin.featuredPostIds
-      .filter((id) => Boolean(db.posts[id]))
-      .map((id) => ({ type: 'post' as const, id })),
-    ...allBooks.filter(b => b.recommendedHeat >= 95).slice(0, 1).map(b => ({ type: 'book' as const, id: b.id })),
-    ...listNotes('hot').slice(0, 2).map((n) => ({ type: 'note' as const, id: n.id })),
-  ].slice(0, 5)
+  const userId = state.status === 'authenticated' ? state.user.id : ''
+  const adminQuery = useAdminConfig()
+  const postsQuery = usePosts({ sort: 'hot', limit: 12 })
+  const notesQuery = useNotes({ sort: 'hot', limit: 12, onlyPublished: true })
+  const booksQuery = useBooks({ limit: 50 })
+  const toggle = useToggleInteraction()
 
-  const hotPosts = listPosts('hot').slice(0, 6)
-  const hotNotes = listNotes('hot').slice(0, 6)
-  const hotBooks = allBooks.sort((a, b) => b.recommendedHeat - a.recommendedHeat).slice(0, 2)
-  
+  const admin = adminQuery.data
+  const books = booksQuery.data?.items ?? []
+  const posts = postsQuery.data?.items ?? []
+  const notes = notesQuery.data?.items ?? []
+  const postById = new Map(posts.map((post) => [post.id, post]))
+  const noteById = new Map(notes.map((note) => [note.id, note]))
+  const bookById = new Map(books.map((book) => [book.id, book]))
+  const authors = useProfiles([...posts.map((post) => post.authorId), ...notes.map((note) => note.authorId)]).data ?? {}
+
+  const featured: FeedItem[] = admin
+    ? [
+        ...admin.featuredPostIds
+          .filter((id) => Boolean(postById.get(id)))
+          .map((id) => ({ type: 'post' as const, id })),
+        ...books.filter((b) => b.recommendedHeat >= 95).slice(0, 1).map((b) => ({ type: 'book' as const, id: b.id })),
+        ...notes.slice(0, 2).map((n) => ({ type: 'note' as const, id: n.id })),
+      ].slice(0, 5)
+    : []
+
+  const hotBooks = [...books].sort((a, b) => b.recommendedHeat - a.recommendedHeat).slice(0, 2)
   const hot: FeedItem[] = [
-    ...hotPosts.slice(0, 2).map((p) => ({ type: 'post' as const, id: p.id })),
+    ...posts.slice(0, 2).map((p) => ({ type: 'post' as const, id: p.id })),
     ...hotBooks.map((b) => ({ type: 'book' as const, id: b.id })),
-    ...hotNotes.slice(0, 2).map((n) => ({ type: 'note' as const, id: n.id })),
-    ...hotPosts.slice(2).map((p) => ({ type: 'post' as const, id: p.id })),
-    ...hotNotes.slice(2).map((n) => ({ type: 'note' as const, id: n.id })),
+    ...notes.slice(0, 2).map((n) => ({ type: 'note' as const, id: n.id })),
+    ...posts.slice(2).map((p) => ({ type: 'post' as const, id: p.id })),
+    ...notes.slice(2).map((n) => ({ type: 'note' as const, id: n.id })),
   ].slice(0, 8)
+
+  const loading = adminQuery.isLoading || postsQuery.isLoading || notesQuery.isLoading || booksQuery.isLoading
+  if (loading) return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载首页中…</div></div>
+  const loadError = adminQuery.error ?? postsQuery.error ?? notesQuery.error ?? booksQuery.error
+  if (loadError) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载失败：{loadError instanceof Error ? loadError.message : '未知错误'}</div></div>
+  }
 
   return (
     <div className="page">
@@ -63,7 +85,7 @@ export function HomePage() {
           </Link>
         </div>
         <div className="rank-strip" style={{ padding: '0 4px', gap: '12px' }}>
-          {allBooks
+          {[...books]
             .sort((a, b) => b.recommendedHeat - a.recommendedHeat)
             .slice(0, 8)
             .map((b) => (
@@ -105,9 +127,9 @@ export function HomePage() {
         <div className="grid">
           {featured.map((it) => {
             if (it.type === 'post') {
-              const p = db.posts[it.id]
+              const p = postById.get(it.id)
               if (!p) return null
-              const author = db.users[p.authorId]
+              const author = authors[p.authorId]
               return (
                 <Link key={`p-${p.id}`} className="card" to={`/forum/${p.id}`}>
                   <div className="card-kicker" style={{ color: 'var(--accent)', fontWeight: '400', fontSize: '11px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -126,8 +148,8 @@ export function HomePage() {
                     <span className="row gap" style={{ gap: '4px' }}><MessageCircle size={14} /> {p.stats.comments}</span>
                     <button className="btn sm" style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'transparent', border: 'none', padding: '2px 4px', cursor: 'pointer' }} onClick={(e) => {
                       e.stopPropagation()
-                      if (user) {
-                        toggleInteraction(user.id, 'like', 'post', p.id)
+                      if (userId) {
+                        toggle.mutate({ userId, kind: 'like', targetType: 'post', targetId: p.id })
                         toast.push('已点赞', 'success')
                       }
                     }}>
@@ -139,7 +161,7 @@ export function HomePage() {
               )
             }
             if (it.type === 'book') {
-              const b = db.books[it.id]
+              const b = bookById.get(it.id)
               if (!b) return null
               return (
                 <Link key={`b-${b.id}`} className="card book-card" to={`/read/${b.id}`}>
@@ -155,9 +177,9 @@ export function HomePage() {
                 </Link>
               )
             }
-            const n = db.notes[it.id]
+            const n = noteById.get(it.id)
             if (!n) return null
-            const author = db.users[n.authorId]
+            const author = authors[n.authorId]
             return (
               <Link key={`n-${n.id}`} className="card" to={`/notes/${n.id}/edit`}>
                 <div className="card-kicker" style={{ color: '#8ba89d', fontWeight: '400', fontSize: '11px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -191,9 +213,9 @@ export function HomePage() {
         <div className="list">
           {hot.map((it) => {
             if (it.type === 'post') {
-              const p = db.posts[it.id]
+              const p = postById.get(it.id)
               if (!p) return null
-              const author = db.users[p.authorId]
+              const author = authors[p.authorId]
               return (
                 <Link key={`hp-${p.id}`} className="card" to={`/forum/${p.id}`}>
                   <div className="row space" style={{ marginBottom: '8px' }}>
@@ -223,8 +245,8 @@ export function HomePage() {
                       <span className="row gap" style={{ gap: '4px' }}><MessageCircle size={14} /> {p.stats.comments}</span>
                       <button className="btn sm" style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'transparent', border: 'none', padding: '2px 4px', cursor: 'pointer' }} onClick={(e) => {
                         e.stopPropagation()
-                        if (user) {
-                          toggleInteraction(user.id, 'like', 'post', p.id)
+                        if (userId) {
+                          toggle.mutate({ userId, kind: 'like', targetType: 'post', targetId: p.id })
                           toast.push('已点赞', 'success')
                         }
                       }}>
@@ -232,8 +254,8 @@ export function HomePage() {
                       </button>
                       <button className="btn sm" style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'transparent', border: 'none', padding: '2px 4px', cursor: 'pointer' }} onClick={(e) => {
                         e.stopPropagation()
-                        if (user) {
-                          toggleInteraction(user.id, 'collect', 'post', p.id)
+                        if (userId) {
+                          toggle.mutate({ userId, kind: 'collect', targetType: 'post', targetId: p.id })
                           toast.push('已收藏', 'success')
                         }
                       }}>
@@ -245,7 +267,7 @@ export function HomePage() {
               )
             }
             if (it.type === 'book') {
-              const b = db.books[it.id]
+              const b = bookById.get(it.id)
               if (!b) return null
               return (
                 <Link key={`hb-${b.id}`} className="card book-card" to={`/read/${b.id}`}>
@@ -269,9 +291,9 @@ export function HomePage() {
                 </Link>
               )
             }
-            const n = db.notes[it.id]
+            const n = noteById.get(it.id)
             if (!n) return null
-            const author = db.users[n.authorId]
+            const author = authors[n.authorId]
             return (
               <Link key={`hn-${n.id}`} className="card" to={`/notes/${n.id}/edit`}>
                 <div className="row space" style={{ marginBottom: '8px' }}>
@@ -300,8 +322,8 @@ export function HomePage() {
                   <div className="card-meta" style={{ marginTop: 0 }}>
                       <button className="btn sm" style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'transparent', border: 'none', padding: '2px 4px', cursor: 'pointer' }} onClick={(e) => {
                         e.stopPropagation()
-                        if (user) {
-                          toggleInteraction(user.id, 'like', 'note', n.id)
+                        if (userId) {
+                          toggle.mutate({ userId, kind: 'like', targetType: 'note', targetId: n.id })
                           toast.push('已点赞', 'success')
                         }
                       }}>
@@ -309,8 +331,8 @@ export function HomePage() {
                       </button>
                       <button className="btn sm" style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'transparent', border: 'none', padding: '2px 4px', cursor: 'pointer' }} onClick={(e) => {
                         e.stopPropagation()
-                        if (user) {
-                          toggleInteraction(user.id, 'collect', 'note', n.id)
+                        if (userId) {
+                          toggle.mutate({ userId, kind: 'collect', targetType: 'note', targetId: n.id })
                           toast.push('已收藏', 'success')
                         }
                       }}>

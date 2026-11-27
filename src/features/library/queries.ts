@@ -15,3 +15,6 @@ export function useBooks(filter: BookFilter) {
 export function useEnsureTag() {
   return useMutation({ mutationFn: (name: string) => repositories.books.ensureTag(name) })
 }
+export function useAdminConfig() {
+  return useQuery({ queryKey: ['admin-config'], queryFn: () => repositories.admin.getConfig() })
+}
