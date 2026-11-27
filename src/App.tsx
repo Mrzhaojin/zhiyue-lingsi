@@ -40,25 +40,62 @@ import {
   RequireAuth,
   RequirePermission,
 } from './modules/auth/client'
-import { ensureDbInitialized } from './data/db'
+import { initializeDatabase } from './data/db'
 import { useEffect, useState, useCallback } from 'react'
 
 function App() {
   useApplyTheme()
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
+  const [ready, setReady] = useState(false)
+  const [bootError, setBootError] = useState<string | null>(null)
 
-  // 检测屏幕尺寸
   const checkScreenSize = useCallback(() => {
     setIsMobile(window.innerWidth < 768)
   }, [])
 
   useEffect(() => {
-    ensureDbInitialized()
+    let cancelled = false
+    initializeDatabase()
+      .then(() => {
+        if (!cancelled) setReady(true)
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setBootError(error instanceof Error ? error.message : '数据初始化失败')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
     window.addEventListener('resize', checkScreenSize)
     return () => window.removeEventListener('resize', checkScreenSize)
   }, [checkScreenSize])
 
-  // 选择合适的Shell组件
+  if (bootError) {
+    return (
+      <div style={{ maxWidth: 560, margin: '80px auto', padding: 24, fontFamily: 'system-ui, sans-serif' }}>
+        <h1 style={{ fontSize: 20, marginBottom: 12 }}>本地数据初始化失败</h1>
+        <p style={{ color: '#b42318', fontSize: 14, lineHeight: 1.7 }}>{bootError}</p>
+        <p style={{ color: '#666', fontSize: 13, lineHeight: 1.8 }}>
+          旧数据仍保留在 localStorage 的 read_forum_db_v5 中，没有被删除。
+          可以先在浏览器控制台执行 <code>copy(localStorage.getItem('read_forum_db_v5'))</code> 备份，再刷新重试。
+        </p>
+        <button onClick={() => window.location.reload()} style={{ marginTop: 12, padding: '8px 16px' }}>
+          重新加载
+        </button>
+      </div>
+    )
+  }
+
+  if (!ready) {
+    return (
+      <div style={{ display: 'grid', placeItems: 'center', height: '100vh', color: '#888', fontSize: 14 }}>
+        正在载入本地数据…
+      </div>
+    )
+  }
+
   const ShellComponent = isMobile ? MobileShell : WebShell
 
   return (

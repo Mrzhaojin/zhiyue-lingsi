@@ -58,29 +58,45 @@ AuthProvider（状态机 + 身份同步）
   这是修复「登录是 A、内容是 B」的关键一步；
 - 自研 Express/JWT 服务端已归档到 `docs/archive/auth-server/`，不再参与构建。
 
-## 5. 数据层
-
-**当前（M0）**：仍是 `localStorage['read_forum_db_v5']` 单 JSON，但已经补上：
-写入配额捕获与用户可见提示、导出/导入备份、缺失当前用户时不再整库覆盖、身份绑定。
-
-**目标（M1）**：
+## 5. 数据层（M1 已实施）
 
 ```text
-Repository 接口
-  ├─ LocalAdapter（Dexie）
-  │    users / posts / comments / notes / interactions / shelves / …
-  │    images 表存 Blob；记录只存 imageId
-  │    事务保证「计数 + 记录」一致
-  └─ 迁移器：旧 JSON → zod 校验 → 逐表写入 → 条数校验 → 保留只读备份
+┌──────────── 页面（同步读取，不改签名）────────────┐
+│ getDbSnapshot / listPosts / getCurrentUser …        │
+└──────────────────────┬──────────────────────────────┘
+                       ▼
+┌──────────── src/data/api.ts ────────────────────────┐
+│ 读：直接读内存快照（O(1)）                          │
+│ 写：mutate(db, ctx) —— 改内存 + 登记实体级操作       │
+└──────────────────────┬──────────────────────────────┘
+                       ▼
+┌──────────── src/data/db/store.ts ───────────────────┐
+│ 版本号 + 订阅（Shell 统一订阅，写后一帧内重渲染）    │
+│ 写队列：按实体 put/delete，交给 Dexie 事务           │
+│ BroadcastChannel：其他标签页收到变更后重新载入       │
+└──────────────────────┬──────────────────────────────┘
+                       ▼
+┌──────────── IndexedDB（Dexie）──────────────────────┐
+│ users / books / posts / comments / notes / tags /   │
+│ interactions / bookmarks / readingHistory / vocab /  │
+│ notifications / shelves / aiChatThreads / aiMessages │
+│ / aiAnalysisRecords / meta（16 张表，均带索引）      │
+└──────────────────────────────────────────────────────┘
+
+启动：bootstrap → 首次运行迁移旧 localStorage 或写入种子
+      → 校验条数 → 载入内存快照
 ```
 
-硬性规则：
+已落地的规则：
 
-1. 页面不 import 存储实现，只消费 hooks；
-2. 计数由数据派生或事务维护，不手工 ±1；
-3. 图片压缩后存 Blob/对象存储，数据库只存引用；
-4. 删除一律软删 + 级联清理；
-5. 迁移失败不写回、不删旧数据。
+1. 写入只落「被改动的记录」，不再序列化整库；
+2. 删除有级联：帖子 → 评论 / 互动 / 后台引用 / 作者计数；笔记 → 互动；
+3. 迁移失败直接报错并保留旧 key，前端显示可恢复的错误页；
+4. 迁移与写盘都有条数校验，单测覆盖；
+5. 页面暂不改签名（M1.5 再换成查询 hooks），但 Shell 已统一订阅版本。
+
+仍待办（M1.5 / M2）：图片压缩 + Blob 表、分页与索引查询、软删除与回收站、
+真正的 Repository 接口抽象（LocalAdapter / CloudAdapter）。
 
 ## 6. AI 层
 
@@ -104,14 +120,15 @@ npm run lint        # 必须 0 error
 npm run build       # 产物预算：入口 gzip < 200KB（M4 目标）
 ```
 
-M1 起补：Vitest（Repository 契约、迁移器）+ Playwright（登录、发帖评论、阅读赏析）+ CI。
+已补：Vitest（认证 5 个 + 数据层 8 个，含旧数据迁移、级联删除、写入订阅）。
+待补：Playwright 回归、CI 门禁（M5）。
 
 ## 8. 进度
 
 | 阶段 | 状态 | 关键产出 |
 |---|---|---|
 | M0 止血 | ✅ | 密钥清理、运行时模式、身份绑定、配额处理、备份、认证瘦身 |
-| M1 数据层 | 进行中 | Repository / IndexedDB / 迁移器 / hooks |
+| M1 数据层 | ✅ | IndexedDB 16 表 / 实体级写入 / 迁移器 / 版本订阅 / 13 个单测 |
 | M2 身份与权限 | 计划 | profiles、RLS、角色来源 |
 | M3 AI | 计划 | BFF、SSE、结构化输出、评测集 |
 | M4 体验 | 计划 | 懒加载、设计系统、a11y、性能 |

@@ -5,6 +5,7 @@ import { formatTime } from '../lib/format'
 import { BookCover } from '../components/BookCover'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
 import { useToast } from '../ui/useToast'
+import { useDatabaseVersion } from '../data/useDatabaseVersion'
 
 function formatAnalysisText(input: {
   bookTitle?: string
@@ -24,7 +25,11 @@ export function AIAnalysisRecordsPage() {
   const toast = useToast()
   const user = getCurrentUser()
   const navigate = useNavigate()
-  const records = useMemo(() => listAIAnalysisRecords(user.id), [user.id])
+  const dataVersion = useDatabaseVersion()
+  const records = useMemo(() => {
+    void dataVersion
+    return listAIAnalysisRecords(user.id)
+  }, [user.id, dataVersion])
 
   return (
     <div className="page">

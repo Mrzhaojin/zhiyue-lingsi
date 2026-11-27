@@ -43,7 +43,7 @@ export function SettingsPage() {
     const text = await file.text()
     if (!window.confirm('导入会覆盖当前浏览器中的全部数据，确定继续？')) return
     try {
-      const stats = importDatabaseJson(text)
+      const stats = await importDatabaseJson(text)
       toast.push(`导入成功：${stats.users} 位用户 / ${stats.posts} 篇帖子 / ${stats.notes} 篇笔记`, 'success')
       window.location.reload()
     } catch (error) {

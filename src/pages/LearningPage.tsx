@@ -5,6 +5,7 @@ import { deleteVocabItem, getCurrentUser, listVocab } from '../data/db'
 import { formatTime } from '../lib/format'
 import { useToast } from '../ui/useToast'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
+import { useDatabaseVersion } from '../data/useDatabaseVersion'
 
 function downloadText(filename: string, text: string) {
   const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
@@ -23,14 +24,16 @@ export function LearningPage() {
   const [tab, setTab] = useState<'word' | 'sentence'>('word')
   const [sort, setSort] = useState<'time' | 'alpha'>('time')
   const ref = useRef<HTMLDivElement | null>(null)
+  const dataVersion = useDatabaseVersion()
 
   const items = useMemo(() => {
+    void dataVersion
     const list = listVocab(user.id, tab)
     if (sort === 'alpha') {
       return [...list].sort((a, b) => a.text.localeCompare(b.text))
     }
     return list
-  }, [sort, tab, user.id])
+  }, [sort, tab, user.id, dataVersion])
 
   const exportText = items.map((i) => `${formatTime(i.createdAt)}\t${i.text}`).join('\n')
 

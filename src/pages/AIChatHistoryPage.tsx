@@ -4,13 +4,18 @@ import { deleteAIChatThread, getCurrentUser, listAIChatMessages, listAIChatThrea
 import { formatTime } from '../lib/format'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
 import { useToast } from '../ui/useToast'
+import { useDatabaseVersion } from '../data/useDatabaseVersion'
 
 export function AIChatHistoryPage() {
   const toast = useToast()
   const user = getCurrentUser()
   const navigate = useNavigate()
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const threads = useMemo(() => listAIChatThreads(user.id), [user.id])
+  const dataVersion = useDatabaseVersion()
+  const threads = useMemo(() => {
+    void dataVersion
+    return listAIChatThreads(user.id)
+  }, [user.id, dataVersion])
 
   return (
     <div className="page">

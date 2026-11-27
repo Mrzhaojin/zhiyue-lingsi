@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { deleteNote, deletePost, getAdminConfig, getDbSnapshot, updateAdminConfig } from '../data/db'
 import { useToast } from '../ui/useToast'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
+import { useDatabaseVersion } from '../data/useDatabaseVersion'
 
 export function AdminPage() {
   const toast = useToast()
@@ -10,15 +11,17 @@ export function AdminPage() {
   const db = getDbSnapshot()
   const admin = getAdminConfig()
   const [keyword, setKeyword] = useState('')
+  const dataVersion = useDatabaseVersion()
 
   const stats = useMemo(() => {
+    void dataVersion
     const users = Object.keys(db.users).length
     const books = Object.keys(db.books).length
     const posts = Object.keys(db.posts).length
     const notes = Object.keys(db.notes).length
     const comments = Object.keys(db.comments).length
     return { users, books, posts, notes, comments }
-  }, [db])
+  }, [db, dataVersion])
 
   return (
     <div className="page">

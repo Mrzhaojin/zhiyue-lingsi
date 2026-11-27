@@ -6,6 +6,7 @@ import { formatTime } from '../lib/format'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
 import { useToast } from '../ui/useToast'
 import { MessageCircle, BookOpen, Bell } from 'lucide-react'
+import { useDatabaseVersion } from '../data/useDatabaseVersion'
 
 type Tab = 'all' | NotificationType
 
@@ -20,8 +21,12 @@ export function MessagesPage() {
   const toast = useToast()
   const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('all')
+  const dataVersion = useDatabaseVersion()
 
-  const all = useMemo(() => listNotifications(user.id), [user.id])
+  const all = useMemo(() => {
+    void dataVersion
+    return listNotifications(user.id)
+  }, [user.id, dataVersion])
   const items = useMemo(() => {
     if (tab === 'all') return all
     return all.filter((n) => n.type === tab)

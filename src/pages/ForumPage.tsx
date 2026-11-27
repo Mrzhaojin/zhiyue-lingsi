@@ -1,10 +1,9 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { getDbSnapshot, listPosts, listTags, upsertTagByName } from '../data/db'
 import { formatTime } from '../lib/format'
 import { useToast } from '../ui/useToast'
 import { Search, MessageCircle, ThumbsUp } from 'lucide-react'
-import { LoadingSpinner } from '../components/LoadingSpinner'
 
 function getAvatarColor(id: string) {
   const colors = ['#a3c2b5', '#b2c8d4', '#d4c8b2', '#c8b2d4', '#b2d4c8', '#d4b2b2', '#e2a3a3', '#a3b2e2'];
@@ -17,12 +16,11 @@ export function ForumPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const tab = (params.get('tab') ?? 'hot') as 'latest' | 'hot' | 'topics'
-  const category = params.get('category') ?? 'all'
-  const [loading, setLoading] = useState(true)
-  const [db, setDb] = useState(getDbSnapshot())
-  const [posts, setPosts] = useState(tab === 'topics' ? [] : listPosts(tab))
-  const [tags, setTags] = useState(listTags())
   const [topicQuery, setTopicQuery] = useState('')
+  // 从数据快照派生：Shell 订阅了数据版本，任何写入后本页会自动重算，不再维护一份会过期的 state
+  const db = getDbSnapshot()
+  const posts = tab === 'topics' ? [] : listPosts(tab)
+  const tags = listTags()
   
   const filteredTags = useMemo(() => {
     const q = topicQuery.trim()
@@ -30,27 +28,6 @@ export function ForumPage() {
     return tags.filter((t) => t.name.includes(q.startsWith('#') ? q : `#${q}`) || t.name.includes(q))
   }, [tags, topicQuery])
   
-  const categories = [
-    { id: 'all', name: '全部' },
-    { id: 'discussion', name: '讨论' },
-    { id: 'share', name: '分享' },
-    { id: 'question', name: '问答' },
-    { id: 'news', name: '资讯' }
-  ]
-  
-  useEffect(() => {
-    // 模拟数据加载
-    const loadData = async () => {
-      setLoading(true)
-      setTimeout(() => {
-        setDb(getDbSnapshot())
-        setPosts(tab === 'topics' ? [] : listPosts(tab))
-        setTags(listTags())
-        setLoading(false)
-      }, 500)
-    }
-    loadData()
-  }, [tab, category])
 
   return (
     <div className="page">
@@ -71,14 +48,14 @@ export function ForumPage() {
         <div className="tabs" style={{ background: 'var(--surface-2)', borderRadius: 'var(--radius-sm)', padding: '4px' }}>
           <button
             className={`tab ${tab === 'hot' ? 'active' : ''}`}
-            onClick={() => setParams({ tab: 'hot', category })}
+            onClick={() => setParams({ tab: 'hot' })}
             style={{ fontWeight: 400, fontSize: '13px' }}
           >
             热门
           </button>
           <button
             className={`tab ${tab === 'latest' ? 'active' : ''}`}
-            onClick={() => setParams({ tab: 'latest', category })}
+            onClick={() => setParams({ tab: 'latest' })}
             style={{ fontWeight: 400, fontSize: '13px' }}
           >
             最新
@@ -92,35 +69,10 @@ export function ForumPage() {
           </button>
         </div>
         
-        {tab !== 'topics' && (
-          <div className="categories" style={{ marginTop: '16px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {categories.map((cat) => (
-              <button
-                key={cat.id}
-                className={`btn sm ${category === cat.id ? 'primary' : ''}`}
-                onClick={() => setParams({ tab, category: cat.id })}
-                style={{
-                  fontSize: '12px',
-                  padding: '6px 12px',
-                  borderRadius: '16px',
-                  border: category === cat.id ? 'none' : '1px solid var(--border)',
-                  background: category === cat.id ? 'var(--accent)' : 'var(--surface-2)',
-                  color: category === cat.id ? '#fff' : 'var(--text)'
-                }}
-              >
-                {cat.name}
-              </button>
-            ))}
-          </div>
-        )}
       </section>
 
       <section className="section">
-        {loading ? (
-          <div style={{ padding: '60px 0', display: 'flex', justifyContent: 'center' }}>
-            <LoadingSpinner size="large" text="加载中..." />
-          </div>
-        ) : tab === 'topics' ? (
+        {tab === 'topics' ? (
           <>
             <div className="row gap" style={{ marginBottom: '20px', gap: '12px' }}>
               <input
