@@ -9,9 +9,9 @@ import {
   getCurrentUser,
   getDbSnapshot,
   importDatabaseJson,
-  initializeDatabase,
   listComments,
-} from './db'
+} from './core'
+import { initializeDatabase } from './initialize'
 import { dexie } from './db/persist'
 import { store } from './db/store'
 

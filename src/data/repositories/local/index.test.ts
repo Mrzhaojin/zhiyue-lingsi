@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { AppError } from '../../../domain/errors'
-import { initializeDatabase } from '../../db'
+import { initializeDatabase } from '../../initialize'
 import { dexie } from '../../db/persist'
 import { store } from '../../db/store'
 import { repositories } from '..'

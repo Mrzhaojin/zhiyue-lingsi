@@ -1,4 +1,4 @@
-import { ensureUserRecord } from '../../../data/db'
+import { ensureUserRecord } from '../../../data/core'
 import { createLogger } from '../../../lib/logger'
 
 const log = createLogger('auth-identity')

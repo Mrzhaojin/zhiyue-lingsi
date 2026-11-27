@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { initializeDatabase } from '../../db'
+import { initializeDatabase } from '../../initialize'
 import { dexie } from '../../db/persist'
 import { store } from '../../db/store'
 import { reconcileCounters } from '../../core/counters'

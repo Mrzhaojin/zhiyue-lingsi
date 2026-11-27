@@ -39,7 +39,7 @@ import {
   RequireAuth,
   RequirePermission,
 } from './modules/auth/client'
-import { initializeDatabase } from './data/db'
+import { initializeDatabase } from './data/initialize'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from './app/queryClient'
 import { DataInvalidator } from './app/DataInvalidator'
