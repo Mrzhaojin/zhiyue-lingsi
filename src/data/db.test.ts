@@ -30,6 +30,20 @@ describe('IndexedDB 数据层', () => {
     expect(getCurrentUser().id).toBeTruthy()
   })
 
+  it('写入时拆章节，读取时组装，并补齐来源', async () => {
+    const db = getDbSnapshot()
+    const book = Object.values(db.books)[0]
+    expect(book.chapters.length).toBeGreaterThan(0)
+    expect(await dexie.chapters.count()).toBeGreaterThan(0)
+
+    const stored = await dexie.books.get(book.id)
+    expect(stored && 'chapters' in stored).toBe(false)
+    expect(stored?.source?.type).toBe('excerpt')
+
+    const schema = await dexie.meta.get('schema')
+    expect(schema?.value).toMatchObject({ version: 2 })
+  })
+
   it('登录身份可以绑定为数据层当前用户', () => {
     const before = getCurrentUser().id
     const bound = ensureUserRecord({ id: 'user-1', nickname: '测试读者', role: 'user' })

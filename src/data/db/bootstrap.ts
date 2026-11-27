@@ -41,6 +41,13 @@ export async function bootstrapDatabase(createSeed: () => Database): Promise<Boo
   const schemaMeta = await dexie.meta.get('schema')
 
   if (schemaMeta) {
+    const current = schemaMeta as { version?: number }
+    if (current.version !== SCHEMA_VERSION) {
+      await dexie.meta.put({
+        key: 'schema',
+        value: { ...current, version: SCHEMA_VERSION, upgradedAt: Date.now() },
+      })
+    }
     store.replace(await loadDatabase())
     return { source: 'existing' }
   }

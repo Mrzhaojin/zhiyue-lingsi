@@ -35,6 +35,20 @@ export type User = {
 export type BookCategory = '小说' | '社科' | '英文原著' | '散文' | '人文历史' | '健康生活' | '其他'
 export type ReadingDifficulty = '入门' | '中级' | '进阶'
 
+export type BookSource = {
+  type: 'public-domain' | 'authorized' | 'excerpt'
+  title: string
+  license: string
+  url?: string
+  attribution: string
+}
+
+export type Chapter = {
+  id: string
+  title: string
+  content: string
+}
+
 export type Book = {
   id: string
   title: string
@@ -48,11 +62,9 @@ export type Book = {
   hasAudioIntro: boolean
   audioIntroUrl?: string
   language: 'zh' | 'en'
-  chapters: Array<{
-    id: string
-    title: string
-    content: string
-  }>
+  /** 版权与出处；旧数据由迁移补为 excerpt/unverified，需人工复核 */
+  source?: BookSource
+  chapters: Chapter[]
 }
 
 export type TopicTag = {
@@ -68,6 +80,10 @@ export type ContentType = 'post' | 'note'
 export type Post = {
   id: string
   authorId: string
+  /** original=原创帖；note=引用已发布笔记 */
+  kind?: 'original' | 'note'
+  noteId?: string
+  deletedAt?: number
   title: string
   contentText: string
   imageUrls: string[]
@@ -86,6 +102,7 @@ export type Post = {
 export type Comment = {
   id: string
   postId: string
+  deletedAt?: number
   authorId: string
   contentText: string
   imageUrls: string[]
@@ -105,6 +122,9 @@ export type Note = {
   createdAt: number
   updatedAt: number
   status: 'draft' | 'published'
+  /** 发布后对应的引用型帖子 */
+  publishedPostId?: string
+  deletedAt?: number
   template: NoteTemplate
   shareCardDataUrl?: string
   source?: {

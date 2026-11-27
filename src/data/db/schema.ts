@@ -59,8 +59,16 @@ export type TableName =
   | 'aiAnalysisRecords'
 
 export const LEGACY_STORAGE_KEY = 'read_forum_db_v5'
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 export const DEFAULT_BANNED_KEYWORDS = ['赌博', '色情', '违法', '诈骗']
+
+/** 历史演示内容：来源未核实，需人工复核后才能进入 RAG 索引 */
+export const DEFAULT_BOOK_SOURCE = {
+  type: 'excerpt' as const,
+  title: '历史演示摘录',
+  license: 'unverified',
+  attribution: '待人工复核',
+}
 
 export function defaultAdminConfig(): Database['admin'] {
   return { pinnedPostIds: [], featuredPostIds: [], bannedKeywords: [...DEFAULT_BANNED_KEYWORDS] }
@@ -112,5 +120,11 @@ export function normalizeDatabase(input: Partial<Database>): Database {
   if (!db.admin.bannedKeywords) db.admin.bannedKeywords = [...DEFAULT_BANNED_KEYWORDS]
   if (!db.admin.pinnedPostIds) db.admin.pinnedPostIds = []
   if (!db.admin.featuredPostIds) db.admin.featuredPostIds = []
+  for (const book of Object.values(db.books)) {
+    if (!book.source) book.source = { ...DEFAULT_BOOK_SOURCE }
+  }
+  for (const post of Object.values(db.posts)) {
+    if (!post.kind) post.kind = 'original'
+  }
   return db
 }
