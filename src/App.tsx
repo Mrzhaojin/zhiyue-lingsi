@@ -28,7 +28,6 @@ import { ProfileEditPage } from './pages/ProfileEditPage'
 import { AIChatHistoryPage } from './pages/AIChatHistoryPage'
 import { AIAnalysisRecordsPage } from './pages/AIAnalysisRecordsPage'
 import { ToastProvider } from './ui/ToastProvider'
-import { useApplyTheme } from './app/theme'
 import { GlobalAIAssistant } from './components/GlobalAIAssistant'
 import {
   AuthProvider,
@@ -44,10 +43,10 @@ import { initializeDatabase } from './data/db'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from './app/queryClient'
 import { DataInvalidator } from './app/DataInvalidator'
+import { ThemeSync } from './app/theme'
 import { useEffect, useState, useCallback } from 'react'
 
 function App() {
-  useApplyTheme()
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
   const [ready, setReady] = useState(false)
   const [bootError, setBootError] = useState<string | null>(null)
@@ -105,6 +104,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <DataInvalidator />
+        <ThemeSync />
       <ToastProvider>
         <Routes>
           <Route path="/zhiyueling-si/login" element={<LoginPage />} />

@@ -6,7 +6,7 @@ import 'quill/dist/quill.snow.css'
 import { useAuth } from '../modules/auth/client'
 import { useDeleteNote, useNote, useSaveNote } from '../features/notes/queries'
 import { useCreatePost } from '../features/posts/queries'
-import { useEnsureTag } from '../features/library/queries'
+import { useAdminConfig, useEnsureTag } from '../features/library/queries'
 import type { NoteTemplate } from '../domain/models'
 import { checkContentAllowed } from '../services/keywordFilter'
 import { useToast } from '../ui/useToast'
@@ -54,6 +54,7 @@ export function NoteEditorPage(props: { mode: 'create' | 'edit' }) {
   const deleteNote = useDeleteNote()
   const createPost = useCreatePost()
   const ensureTag = useEnsureTag()
+  const adminQuery = useAdminConfig()
 
 
   const [title, setTitle] = useState('')
@@ -402,7 +403,7 @@ export function NoteEditorPage(props: { mode: 'create' | 'edit' }) {
               className="btn primary"
               onClick={async () => {
                 const combined = `${title}\n${content}`
-                const allowed = checkContentAllowed(combined)
+                const allowed = checkContentAllowed(combined, adminQuery.data?.bannedKeywords ?? [])
                 if (!allowed.ok) {
                   toast.push(`内容包含敏感词：${allowed.hit}，已拦截`, 'error')
                   return

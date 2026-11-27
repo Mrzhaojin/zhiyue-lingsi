@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { ThemeMode, User } from '../domain/models'
-import { refreshTheme } from '../app/theme'
 import { useToast } from '../ui/useToast'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
 import { useAuth } from '../modules/auth/client'
@@ -57,7 +56,6 @@ function SettingsForm(props: { user: User }) {
       },
       {
         onSuccess: () => {
-          refreshTheme()
           toast.push('设置已保存', 'success')
         },
         onError: (error) => toast.push(error instanceof Error ? error.message : '保存失败', 'error'),

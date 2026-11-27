@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../modules/auth/client'
-import { useEnsureTag } from '../features/library/queries'
+import { useAdminConfig, useEnsureTag } from '../features/library/queries'
 import { useCreatePost, usePost, useUpdatePost } from '../features/posts/queries'
 import { checkContentAllowed } from '../services/keywordFilter'
 import { useToast } from '../ui/useToast'
@@ -38,6 +38,7 @@ export function NewPostPage() {
   const createPost = useCreatePost()
   const updatePostMutation = useUpdatePost()
   const ensureTag = useEnsureTag()
+  const adminQuery = useAdminConfig()
 
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -70,7 +71,7 @@ export function NewPostPage() {
 
   async function handleSubmit() {
     const combined = `${title}\n${content}`
-    const allowed = checkContentAllowed(combined)
+    const allowed = checkContentAllowed(combined, adminQuery.data?.bannedKeywords ?? [])
     if (!allowed.ok) {
       toast.push(`内容包含敏感词：${allowed.hit}，已拦截`, 'error')
       return

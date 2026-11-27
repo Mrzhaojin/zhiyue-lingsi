@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { getCurrentUser } from '../data/db'
+import { useCurrentProfile } from '../features/settings/queries'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
 
 /**
@@ -8,8 +8,12 @@ import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
  * 演示时被问一句「这些用户从哪来」就会穿帮。
  */
 export function FollowersPage() {
-  const user = getCurrentUser()
+  const profileQuery = useCurrentProfile()
   const navigate = useNavigate()
+  const user = profileQuery.data
+  if (!user) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载中…</div></div>
+  }
 
   return (
     <div className="page">

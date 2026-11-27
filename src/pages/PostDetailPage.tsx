@@ -5,6 +5,7 @@ import { useAddComment, useComments } from '../features/comments/queries'
 import { useInteraction, useToggleInteraction } from '../features/interactions/queries'
 import { useDeletePost, usePost, useRecordPostView, useUpdatePost } from '../features/posts/queries'
 import { useProfiles } from '../features/profiles/queries'
+import { useAdminConfig } from '../features/library/queries'
 import { formatTime } from '../lib/format'
 import { checkContentAllowed } from '../services/keywordFilter'
 import { useToast } from '../ui/useToast'
@@ -41,6 +42,7 @@ export function PostDetailPage() {
   const deleteMutation = useDeletePost()
   const updatePostMutation = useUpdatePost()
   const recordView = useRecordPostView()
+  const adminQuery = useAdminConfig()
 
   const authorIds = [post?.authorId, ...comments.map((comment) => comment.authorId)].filter(
     (id): id is string => Boolean(id),
@@ -253,7 +255,7 @@ export function PostDetailPage() {
             className="btn primary"
             disabled={!commentText.trim()}
             onClick={() => {
-              const allowed = checkContentAllowed(commentText)
+              const allowed = checkContentAllowed(commentText, adminQuery.data?.bannedKeywords ?? [])
               if (!allowed.ok) {
                 toast.push(`评论包含敏感词：${allowed.hit}，已拦截`, 'error')
                 return
