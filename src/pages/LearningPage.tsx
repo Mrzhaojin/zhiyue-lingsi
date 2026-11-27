@@ -1,11 +1,11 @@
 import { toPng } from 'html-to-image'
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { deleteVocabItem, getCurrentUser, listVocab } from '../data/db'
+import { useAuth } from '../modules/auth/client'
+import { useRemoveVocab, useVocab } from '../features/learning/queries'
 import { formatTime } from '../lib/format'
 import { useToast } from '../ui/useToast'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
-import { useDatabaseVersion } from '../data/useDatabaseVersion'
 
 function downloadText(filename: string, text: string) {
   const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
@@ -19,21 +19,22 @@ function downloadText(filename: string, text: string) {
 
 export function LearningPage() {
   const toast = useToast()
-  const user = getCurrentUser()
+  const { state } = useAuth()
+  const userId = state.status === 'authenticated' ? state.user.id : ''
   const navigate = useNavigate()
   const [tab, setTab] = useState<'word' | 'sentence'>('word')
   const [sort, setSort] = useState<'time' | 'alpha'>('time')
   const ref = useRef<HTMLDivElement | null>(null)
-  const dataVersion = useDatabaseVersion()
+  const vocabQuery = useVocab(userId, tab)
+  const removeVocab = useRemoveVocab()
 
   const items = useMemo(() => {
-    void dataVersion
-    const list = listVocab(user.id, tab)
+    const list = vocabQuery.data ?? []
     if (sort === 'alpha') {
       return [...list].sort((a, b) => a.text.localeCompare(b.text))
     }
     return list
-  }, [sort, tab, user.id, dataVersion])
+  }, [sort, vocabQuery.data])
 
   const exportText = items.map((i) => `${formatTime(i.createdAt)}\t${i.text}`).join('\n')
 
@@ -113,8 +114,10 @@ export function LearningPage() {
                   className="btn"
                   style={{ padding: '6px 12px', fontSize: '12px', border: 'none', background: 'var(--danger-bg)', color: 'var(--danger)' }}
                   onClick={() => {
-                    deleteVocabItem(i.id)
-                    toast.push('已从积累本移除', 'success')
+                    removeVocab.mutate(i.id, {
+                      onSuccess: () => toast.push('已从积累本移除', 'success'),
+                      onError: (error) => toast.push(error instanceof Error ? error.message : '删除失败', 'error'),
+                    })
                   }}
                 >
                   删除

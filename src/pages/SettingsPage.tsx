@@ -1,24 +1,40 @@
 import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import {
-  exportDatabaseJson,
-  getCurrentUser,
-  getDatabaseSizeBytes,
-  importDatabaseJson,
-  updateCurrentUser,
-} from '../data/db'
-import type { ThemeMode } from '../domain/models'
+import type { ThemeMode, User } from '../domain/models'
 import { refreshTheme } from '../app/theme'
 import { useToast } from '../ui/useToast'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
 import { useAuth } from '../modules/auth/client'
+import {
+  useCurrentProfile,
+  useDatabaseSize,
+  useExportBackup,
+  useImportBackup,
+  useUpdateProfile,
+} from '../features/settings/queries'
 
 export function SettingsPage() {
+  const profileQuery = useCurrentProfile()
+  if (profileQuery.isLoading) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载中…</div></div>
+  }
+  if (!profileQuery.data) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>未找到当前用户</div></div>
+  }
+  return <SettingsForm user={profileQuery.data} />
+}
+
+function SettingsForm(props: { user: User }) {
+  const user = props.user
   const toast = useToast()
   const navigate = useNavigate()
   const { mode } = useAuth()
-  const user = getCurrentUser()
   const fileRef = useRef<HTMLInputElement | null>(null)
+  const updateProfile = useUpdateProfile()
+  const exportBackup = useExportBackup()
+  const importBackup = useImportBackup()
+  const sizeQuery = useDatabaseSize()
+
   const [nickname, setNickname] = useState(user.nickname)
   const [bio, setBio] = useState(user.bio ?? '')
   const [theme, setTheme] = useState<ThemeMode>(user.settings.theme)
@@ -26,24 +42,50 @@ export function SettingsPage() {
   const [comment, setComment] = useState(user.settings.notifications.comment)
   const [collect, setCollect] = useState(user.settings.notifications.collect)
 
-  const sizeKb = Math.max(1, Math.round(getDatabaseSizeBytes() / 1024))
+  const sizeKb = Math.max(1, Math.round((sizeQuery.data ?? 0) / 1024))
 
-  function handleExport() {
-    const blob = new Blob([exportDatabaseJson()], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `zhiyue-backup-${new Date().toISOString().slice(0, 10)}.json`
-    anchor.click()
-    URL.revokeObjectURL(url)
-    toast.push('已导出备份文件', 'success')
+  function handleSave() {
+    updateProfile.mutate(
+      {
+        nickname: nickname.trim() || user.nickname,
+        bio: bio.trim(),
+        settings: {
+          ...user.settings,
+          theme,
+          notifications: { like, comment, collect },
+        },
+      },
+      {
+        onSuccess: () => {
+          refreshTheme()
+          toast.push('设置已保存', 'success')
+        },
+        onError: (error) => toast.push(error instanceof Error ? error.message : '保存失败', 'error'),
+      },
+    )
+  }
+
+  async function handleExport() {
+    try {
+      const json = await exportBackup.mutateAsync()
+      const blob = new Blob([json], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `zhiyue-backup-${new Date().toISOString().slice(0, 10)}.json`
+      anchor.click()
+      URL.revokeObjectURL(url)
+      toast.push('已导出备份文件', 'success')
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : '导出失败', 'error')
+    }
   }
 
   async function handleImport(file: File) {
     const text = await file.text()
     if (!window.confirm('导入会覆盖当前浏览器中的全部数据，确定继续？')) return
     try {
-      const stats = await importDatabaseJson(text)
+      const stats = await importBackup.mutateAsync(text)
       toast.push(`导入成功：${stats.users} 位用户 / ${stats.posts} 篇帖子 / ${stats.notes} 篇笔记`, 'success')
       window.location.reload()
     } catch (error) {
@@ -58,23 +100,8 @@ export function SettingsPage() {
           <button className="btn icon" onClick={() => navigate(-1)} aria-label="返回">
             <ChevronLeftIcon />
           </button>
-          <button
-            className="btn primary"
-            onClick={() => {
-              updateCurrentUser({
-                nickname: nickname.trim() || user.nickname,
-                bio: bio.trim(),
-                settings: {
-                  ...user.settings,
-                  theme,
-                  notifications: { like, comment, collect },
-                },
-              })
-              refreshTheme()
-              toast.push('设置已保存', 'success')
-            }}
-          >
-            保存
+          <button className="btn primary" onClick={handleSave} disabled={updateProfile.isPending}>
+            {updateProfile.isPending ? '保存中…' : '保存'}
           </button>
         </div>
         <div className="section-head">
@@ -148,8 +175,8 @@ export function SettingsPage() {
               数据存储在本浏览器。清除浏览器数据会导致内容丢失，建议定期导出备份。
             </div>
             <div className="row gap wrap">
-              <button className="btn sm" onClick={handleExport}>导出 JSON</button>
-              <button className="btn sm" onClick={() => fileRef.current?.click()}>导入 JSON</button>
+              <button className="btn sm" onClick={handleExport} disabled={exportBackup.isPending}>导出 JSON</button>
+              <button className="btn sm" onClick={() => fileRef.current?.click()} disabled={importBackup.isPending}>导入 JSON</button>
               <input
                 ref={fileRef}
                 type="file"

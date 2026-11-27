@@ -23,6 +23,12 @@ import {
   getNote,
   getPost,
   getReadingHistory,
+  getDatabaseStats,
+  getUserStats,
+  listNotifications,
+  getUnreadNotificationCount,
+  markNotificationRead,
+  markAllNotificationsRead,
   getUsersByIds,
   incrementPostView,
   getUserById,
@@ -66,6 +72,7 @@ import type {
   ListNotesInput,
   ListPostsInput,
   NoteRepository,
+  NotificationRepository,
   PageResult,
   PostPatch,
   PostRepository,
@@ -288,6 +295,9 @@ const profiles: ProfileRepository = {
   async listByIds(ids) {
     return getUsersByIds([...new Set(ids)])
   },
+  async stats(userId) {
+    return getUserStats(userId)
+  },
   async update(patch) {
     updateCurrentUser(patch)
     return getCurrentUser()
@@ -358,6 +368,21 @@ const content: ContentRepository = {
   },
 }
 
+const notifications: NotificationRepository = {
+  async list(userId) {
+    return listNotifications(userId)
+  },
+  async unreadCount(userId) {
+    return getUnreadNotificationCount(userId)
+  },
+  async markRead(id) {
+    markNotificationRead(id)
+  },
+  async markAllRead(userId) {
+    markAllNotificationsRead(userId)
+  },
+}
+
 const backup: BackupRepository = {
   async exportJson() {
     return exportDatabaseJson()
@@ -377,6 +402,9 @@ const admin: AdminRepository = {
   async updateConfig(patch) {
     updateAdminConfig(patch)
   },
+  async stats() {
+    return getDatabaseStats()
+  },
 }
 
 export const localRepositories: Repositories = {
@@ -387,6 +415,7 @@ export const localRepositories: Repositories = {
   shelf,
   comments,
   content,
+  notifications,
   profiles,
   reading,
   assistant,

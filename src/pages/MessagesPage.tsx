@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { getCurrentUser, listNotifications, markAllNotificationsRead, markNotificationRead } from '../data/db'
+import { useAuth } from '../modules/auth/client'
+import { useMarkAllNotificationsRead, useMarkNotificationRead, useNotifications } from '../features/notifications/queries'
 import type { NotificationType } from '../domain/models'
 import { formatTime } from '../lib/format'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
 import { useToast } from '../ui/useToast'
 import { MessageCircle, BookOpen, Bell } from 'lucide-react'
-import { useDatabaseVersion } from '../data/useDatabaseVersion'
 
 type Tab = 'all' | NotificationType
 
@@ -17,22 +17,25 @@ function iconFor(type: NotificationType) {
 }
 
 export function MessagesPage() {
-  const user = getCurrentUser()
+  const { state } = useAuth()
+  const userId = state.status === 'authenticated' ? state.user.id : ''
   const toast = useToast()
   const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('all')
-  const dataVersion = useDatabaseVersion()
+  const notificationsQuery = useNotifications(userId)
+  const markRead = useMarkNotificationRead()
+  const markAll = useMarkAllNotificationsRead()
 
-  const all = useMemo(() => {
-    void dataVersion
-    return listNotifications(user.id)
-  }, [user.id, dataVersion])
+  const all = useMemo(() => notificationsQuery.data ?? [], [notificationsQuery.data])
   const items = useMemo(() => {
     if (tab === 'all') return all
     return all.filter((n) => n.type === tab)
   }, [all, tab])
 
-  const unreadCount = useMemo(() => all.filter((n) => !n.readAt).length, [all])
+  const unreadCount = all.filter((n) => !n.readAt).length
+  if (notificationsQuery.isLoading) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载中…</div></div>
+  }
 
   return (
     <div className="page">
@@ -45,7 +48,7 @@ export function MessagesPage() {
             <button
               className="btn"
               onClick={() => {
-                markAllNotificationsRead(user.id)
+                markAll.mutate(userId)
                 toast.push('已全部标为已读', 'success')
               }}
               disabled={unreadCount === 0}
@@ -86,7 +89,7 @@ export function MessagesPage() {
                 className="card"
                 {...props}
                 onClick={() => {
-                  markNotificationRead(n.id)
+                  markRead.mutate(n.id)
                 }}
                 style={{
                   borderColor: n.readAt ? 'var(--border)' : 'var(--accent-border)',

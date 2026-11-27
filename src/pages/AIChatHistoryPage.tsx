@@ -1,22 +1,25 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { deleteAIChatThread, getCurrentUser, listAIChatMessages, listAIChatThreads } from '../data/db'
+import { useAuth } from '../modules/auth/client'
+import { useDeleteThread, useThreadMessagesList, useThreads } from '../features/assistant/queries'
 import { formatTime } from '../lib/format'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
 import { useToast } from '../ui/useToast'
-import { useDatabaseVersion } from '../data/useDatabaseVersion'
 import { writeSession } from '../lib/storage'
 
 export function AIChatHistoryPage() {
   const toast = useToast()
-  const user = getCurrentUser()
+  const { state } = useAuth()
+  const userId = state.status === 'authenticated' ? state.user.id : ''
   const navigate = useNavigate()
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const dataVersion = useDatabaseVersion()
-  const threads = useMemo(() => {
-    void dataVersion
-    return listAIChatThreads(user.id)
-  }, [user.id, dataVersion])
+  const threadsQuery = useThreads(userId)
+  const threads = threadsQuery.data ?? []
+  const messageQueries = useThreadMessagesList(threads.map((thread) => thread.id))
+  const deleteThread = useDeleteThread()
+  if (threadsQuery.isLoading) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载中…</div></div>
+  }
 
   return (
     <div className="page">
@@ -34,8 +37,8 @@ export function AIChatHistoryPage() {
 
       <section className="section">
         <div className="list">
-          {threads.map((t) => {
-            const msgs = listAIChatMessages(t.id)
+          {threads.map((t, index) => {
+            const msgs = messageQueries[index]?.data ?? []
             const last = msgs[msgs.length - 1]
             const isOpen = Boolean(expanded[t.id])
             return (
@@ -69,9 +72,10 @@ export function AIChatHistoryPage() {
                     <button
                       className="btn danger"
                       onClick={() => {
-                        deleteAIChatThread(t.id)
-                        toast.push('已删除该对话', 'success')
-                        navigate(0)
+                        deleteThread.mutate(t.id, {
+                          onSuccess: () => toast.push('已删除该对话', 'success'),
+                          onError: (error) => toast.push(error instanceof Error ? error.message : '删除失败', 'error'),
+                        })
                       }}
                     >
                       删除

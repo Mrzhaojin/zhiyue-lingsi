@@ -35,3 +35,22 @@ export function getDatabaseSizeBytes(): number {
   if (typeof Blob !== 'undefined') return new Blob([json]).size
   return json.length
 }
+
+export function getDatabaseStats() {
+  const db = data()
+  return {
+    users: Object.keys(db.users).length,
+    books: Object.keys(db.books).length,
+    posts: Object.keys(db.posts).length,
+    notes: Object.keys(db.notes).length,
+    comments: Object.keys(db.comments).length,
+  }
+}
+
+export function getUserStats(userId: string) {
+  const db = data()
+  return {
+    posts: Object.values(db.posts).filter((post) => post.authorId === userId).length,
+    notes: Object.values(db.notes).filter((note) => note.authorId === userId && note.status === 'published').length,
+  }
+}

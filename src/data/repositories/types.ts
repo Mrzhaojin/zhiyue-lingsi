@@ -1,5 +1,6 @@
 import type {
   AIAnalysisRecord,
+  Notification,
   AIChatMessage,
   AIChatThread,
   Book,
@@ -96,6 +97,7 @@ export interface ProfileRepository {
   current(): Promise<User>
   ensure(input: { id: string; nickname: string; role?: 'user' | 'admin' }): Promise<User>
   listByIds(ids: string[]): Promise<Record<string, User>>
+  stats(userId: string): Promise<{ posts: number; notes: number }>
   update(patch: Partial<User>): Promise<User>
 }
 
@@ -126,6 +128,13 @@ export interface ContentRepository {
   notesByIds(ids: string[]): Promise<Note[]>
 }
 
+export interface NotificationRepository {
+  list(userId: string): Promise<Notification[]>
+  unreadCount(userId: string): Promise<number>
+  markRead(id: string): Promise<void>
+  markAllRead(userId: string): Promise<void>
+}
+
 export interface BackupRepository {
   exportJson(): Promise<string>
   importJson(json: string): Promise<{ users: number; posts: number; notes: number }>
@@ -135,6 +144,7 @@ export interface BackupRepository {
 export interface AdminRepository {
   getConfig(): Promise<{ pinnedPostIds: string[]; featuredPostIds: string[]; bannedKeywords: string[] }>
   updateConfig(patch: Partial<{ pinnedPostIds: string[]; featuredPostIds: string[]; bannedKeywords: string[] }>): Promise<void>
+  stats(): Promise<{ users: number; books: number; posts: number; notes: number; comments: number }>
 }
 
 export interface Repositories {
@@ -145,6 +155,7 @@ export interface Repositories {
   shelf: ShelfRepository
   comments: CommentRepository
   content: ContentRepository
+  notifications: NotificationRepository
   profiles: ProfileRepository
   reading: ReadingRepository
   assistant: AssistantRepository

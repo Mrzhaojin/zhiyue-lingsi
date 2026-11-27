@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom'
-import { getCurrentUser, getDbSnapshot, getUnreadNotificationCount, listPublishedNotesByUser } from '../data/db'
+import { useCurrentProfile } from '../features/settings/queries'
+import { useProfileStats } from '../features/profiles/queries'
+import { useUnreadCount } from '../features/notifications/queries'
 import { ChevronRightIcon } from '../ui/ChevronRightIcon'
 import { BookOpen, Bookmark, Leaf, Bell, Settings, Shield, MessageSquareText, Sparkles } from 'lucide-react'
 import { useAuth } from '../modules/auth/client'
@@ -7,13 +9,18 @@ import { useAuth } from '../modules/auth/client'
 export function MePage() {
   const { state } = useAuth()
   const authUser = state.status === 'authenticated' ? state.user : null
-  // 内容归属以数据层的当前用户为准：登录成功后 AuthProvider 会把 auth.uid 绑定进来。
-  // 以前这里直接读 Supabase 用户并强转 stats，导致统计恒为 0、内容归属错乱。
-  const user = getCurrentUser()
-  const db = getDbSnapshot()
-  const myPosts = Object.values(db.posts).filter((p) => p.authorId === user.id).length
-  const myNotes = listPublishedNotesByUser(user.id).length
-  const unread = getUnreadNotificationCount(user.id)
+  const userId = authUser?.id ?? ''
+  const profileQuery = useCurrentProfile()
+  const statsQuery = useProfileStats(userId)
+  const unreadQuery = useUnreadCount(userId)
+
+  const user = profileQuery.data
+  const myPosts = statsQuery.data?.posts ?? 0
+  const myNotes = statsQuery.data?.notes ?? 0
+  const unread = unreadQuery.data ?? 0
+  if (!user) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载中…</div></div>
+  }
 
   return (
     <div className="page">

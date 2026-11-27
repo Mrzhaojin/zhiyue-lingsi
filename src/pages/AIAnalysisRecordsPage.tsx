@@ -1,11 +1,11 @@
-import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { deleteAIAnalysisRecord, getBook, getCurrentUser, listAIAnalysisRecords } from '../data/db'
+import { useAuth } from '../modules/auth/client'
+import { useAnalysisRecords, useDeleteAnalysis } from '../features/assistant/queries'
+import { useBooks } from '../features/library/queries'
 import { formatTime } from '../lib/format'
 import { BookCover } from '../components/BookCover'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
 import { useToast } from '../ui/useToast'
-import { useDatabaseVersion } from '../data/useDatabaseVersion'
 
 function formatAnalysisText(input: {
   bookTitle?: string
@@ -23,13 +23,17 @@ function formatAnalysisText(input: {
 
 export function AIAnalysisRecordsPage() {
   const toast = useToast()
-  const user = getCurrentUser()
+  const { state } = useAuth()
+  const userId = state.status === 'authenticated' ? state.user.id : ''
   const navigate = useNavigate()
-  const dataVersion = useDatabaseVersion()
-  const records = useMemo(() => {
-    void dataVersion
-    return listAIAnalysisRecords(user.id)
-  }, [user.id, dataVersion])
+  const recordsQuery = useAnalysisRecords(userId)
+  const booksQuery = useBooks({ limit: 200 })
+  const deleteRecord = useDeleteAnalysis()
+  const records = recordsQuery.data ?? []
+  const bookById = new Map((booksQuery.data?.items ?? []).map((book) => [book.id, book]))
+  if (recordsQuery.isLoading) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载中…</div></div>
+  }
 
   return (
     <div className="page">
@@ -48,7 +52,7 @@ export function AIAnalysisRecordsPage() {
       <section className="section">
         <div className="list">
           {records.map((r) => {
-            const book = r.bookId ? getBook(r.bookId) : undefined
+            const book = r.bookId ? bookById.get(r.bookId) : undefined
             const bookTitle = book?.title
             const combined = formatAnalysisText({
               bookTitle,
@@ -103,9 +107,10 @@ export function AIAnalysisRecordsPage() {
                   <button
                     className="btn danger"
                     onClick={() => {
-                      deleteAIAnalysisRecord(r.id)
-                      toast.push('已删除记录', 'success')
-                      navigate(0)
+                      deleteRecord.mutate(r.id, {
+                        onSuccess: () => toast.push('已删除记录', 'success'),
+                        onError: (error) => toast.push(error instanceof Error ? error.message : '删除失败', 'error'),
+                      })
                     }}
                   >
                     删除

@@ -9,3 +9,10 @@ export function useProfiles(ids: string[]) {
     enabled: unique.length > 0,
   })
 }
+export function useProfileStats(userId: string) {
+  return useQuery({
+    queryKey: ['profile', 'stats', userId],
+    queryFn: () => repositories.profiles.stats(userId),
+    enabled: Boolean(userId),
+  })
+}
