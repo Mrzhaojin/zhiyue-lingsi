@@ -18,3 +18,11 @@ export function useEnsureTag() {
 export function useAdminConfig() {
   return useQuery({ queryKey: ['admin-config'], queryFn: () => repositories.admin.getConfig() })
 }
+
+export function useBook(id: string | undefined) {
+  return useQuery({
+    queryKey: ['book', id],
+    queryFn: () => repositories.books.get(id as string),
+    enabled: Boolean(id),
+  })
+}

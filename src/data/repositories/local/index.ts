@@ -231,6 +231,7 @@ const books: BookRepository = {
     const matched = listBooks().filter((book) => {
       if (filter.category && book.category !== filter.category) return false
       if (filter.difficulty && book.difficulty !== filter.difficulty) return false
+      if (filter.minHeat && book.recommendedHeat < filter.minHeat) return false
       if (filter.language && book.language !== filter.language) return false
       if (query) {
         const haystack = `${book.title} ${book.author} ${book.summary}`.toLowerCase()

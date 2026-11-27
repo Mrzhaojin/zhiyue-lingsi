@@ -29,3 +29,10 @@ export function useThreadMessagesList(threadIds: string[]) {
     })),
   })
 }
+
+export function useSaveAnalysis() {
+  return useMutation({
+    mutationFn: (input: Parameters<typeof repositories.assistant.saveAnalysis>[0]) =>
+      repositories.assistant.saveAnalysis(input),
+  })
+}

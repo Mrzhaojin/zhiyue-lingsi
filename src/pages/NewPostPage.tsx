@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { addPost, getCurrentUser, getPost, updatePost, upsertTagByName } from '../data/db'
+import { useAuth } from '../modules/auth/client'
+import { useEnsureTag } from '../features/library/queries'
+import { useCreatePost, usePost, useUpdatePost } from '../features/posts/queries'
 import { checkContentAllowed } from '../services/keywordFilter'
 import { useToast } from '../ui/useToast'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
@@ -23,14 +25,19 @@ function readFilesAsDataUrls(files: FileList): Promise<string[]> {
 
 export function NewPostPage() {
   const toast = useToast()
-  const user = getCurrentUser()
+  const { state } = useAuth()
+  const userId = state.status === 'authenticated' ? state.user.id : ''
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const editId = params.get('edit') ?? ''
   const presetTag = params.get('tag') ?? ''
   const editing = Boolean(editId)
 
-  const existing = useMemo(() => (editing ? getPost(editId) : undefined), [editId, editing])
+  const postQuery = usePost(editing ? editId : undefined)
+  const existing = postQuery.data ?? undefined
+  const createPost = useCreatePost()
+  const updatePostMutation = useUpdatePost()
+  const ensureTag = useEnsureTag()
 
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -59,6 +66,44 @@ export function NewPostPage() {
       .filter(Boolean)
       .slice(0, 8)
       .map((t) => (t.startsWith('#') ? t : `#${t}`))
+  }
+
+  async function handleSubmit() {
+    const combined = `${title}\n${content}`
+    const allowed = checkContentAllowed(combined)
+    if (!allowed.ok) {
+      toast.push(`内容包含敏感词：${allowed.hit}，已拦截`, 'error')
+      return
+    }
+    if (!userId) {
+      toast.push('请先登录', 'error')
+      return
+    }
+
+    const tags = parseTags()
+    try {
+      await Promise.all(tags.map((tag) => ensureTag.mutateAsync(tag)))
+      if (editing && existing) {
+        await updatePostMutation.mutateAsync({
+          id: existing.id,
+          patch: { title: title.trim(), contentText: content.trim(), tags, imageUrls },
+        })
+        toast.push('已更新帖子', 'success')
+        navigate(`/forum/${existing.id}`)
+        return
+      }
+      const created = await createPost.mutateAsync({
+        authorId: userId,
+        title: title.trim(),
+        contentText: content.trim(),
+        imageUrls,
+        tags,
+      })
+      toast.push('发布成功', 'success')
+      navigate(`/forum/${created.id}`)
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : '发布失败', 'error')
+    }
   }
 
   return (
@@ -161,39 +206,8 @@ export function NewPostPage() {
           <div className="row gap">
             <button
               className="btn primary"
-              onClick={() => {
-                const combined = `${title}\n${content}`
-                const allowed = checkContentAllowed(combined)
-                if (!allowed.ok) {
-                  toast.push(`内容包含敏感词：${allowed.hit}，已拦截`, 'error')
-                  return
-                }
-                const tags = parseTags()
-                tags.forEach((t) => upsertTagByName(t))
-
-                if (editing && existing) {
-                  updatePost(existing.id, {
-                    title: title.trim(),
-                    contentText: content.trim(),
-                    tags,
-                    imageUrls,
-                  })
-                  toast.push('已更新帖子', 'success')
-                  navigate(`/forum/${existing.id}`)
-                  return
-                }
-
-                const p = addPost({
-                  authorId: user.id,
-                  title: title.trim(),
-                  contentText: content.trim(),
-                  imageUrls,
-                  tags,
-                })
-                toast.push('发布成功', 'success')
-                navigate(`/forum/${p.id}`)
-              }}
-              disabled={!title.trim() || !content.trim()}
+              onClick={() => { void handleSubmit() }}
+              disabled={!title.trim() || !content.trim() || createPost.isPending || updatePostMutation.isPending}
             >
               {editing ? '保存' : '发布'}
             </button>

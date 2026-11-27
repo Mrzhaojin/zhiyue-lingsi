@@ -67,6 +67,7 @@ export interface InteractionRepository {
 export type BookFilter = {
   category?: string
   difficulty?: string
+  minHeat?: number
   language?: string
   query?: string
   limit: number

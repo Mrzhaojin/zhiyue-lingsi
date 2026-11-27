@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { addToShelf, getCurrentUser, isInShelf, removeFromShelf } from '../data/db'
 import type { Book } from '../domain/models'
+import { useAuth } from '../modules/auth/client'
+import { useBooks } from '../features/library/queries'
+import { useAddToShelf, useRemoveFromShelf, useShelf } from '../features/shelf/queries'
 import { BookCover } from '../components/BookCover'
-import { aiSearchBooks, speakText, stopSpeak } from '../services/ai'
+import { speakText, stopSpeak } from '../services/ai'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
 import { useToast } from '../ui/useToast'
 
@@ -15,46 +17,27 @@ function useQueryParam(name: string) {
 export function ReadSearchPage() {
   const toast = useToast()
   const navigate = useNavigate()
-  const user = getCurrentUser()
+  const { state } = useAuth()
+  const userId = state.status === 'authenticated' ? state.user.id : ''
   const qParam = useQueryParam('q')
   const categoryParam = useQueryParam('category') as Book['category'] | ''
   const difficultyParam = useQueryParam('difficulty') as Book['difficulty'] | ''
   const minHeatParam = useQueryParam('minHeat')
+  const minHeat = Number(minHeatParam || 0) || 0
 
-  const [q, setQ] = useState(qParam)
-  const [category, setCategory] = useState<Book['category'] | ''>(categoryParam)
-  const [difficulty, setDifficulty] = useState<Book['difficulty'] | ''>(difficultyParam)
-  const [minHeat, setMinHeat] = useState<number>(Number(minHeatParam || 0) || 0)
-  const [loading, setLoading] = useState(false)
-  const [results, setResults] = useState<Book[]>([])
-  const [, setShelfTick] = useState(0)
+  const booksQuery = useBooks({
+    ...(qParam ? { query: qParam } : {}),
+    ...(categoryParam ? { category: categoryParam } : {}),
+    ...(difficultyParam ? { difficulty: difficultyParam } : {}),
+    ...(minHeat ? { minHeat } : {}),
+    limit: 100,
+  })
+  const results = booksQuery.data?.items ?? []
+  const shelfQuery = useShelf(userId)
+  const shelfSet = new Set((shelfQuery.data ?? []).map((item) => item.bookId))
+  const addShelf = useAddToShelf()
+  const removeShelf = useRemoveFromShelf()
 
-  const runSearch = useCallback(async (nextQ: string) => {
-    setLoading(true)
-    try {
-      const data = await aiSearchBooks(nextQ, {
-        category: category || undefined,
-        difficulty: difficulty || undefined,
-        minHeat: minHeat || undefined,
-      })
-      setResults(data)
-    } catch {
-      toast.push('搜索失败，请稍后重试', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }, [category, difficulty, minHeat, toast])
-
-  useEffect(() => {
-    setQ(qParam)
-    setCategory(categoryParam)
-    setDifficulty(difficultyParam)
-    setMinHeat(Number(minHeatParam || 0) || 0)
-  }, [categoryParam, difficultyParam, minHeatParam, qParam])
-
-  useEffect(() => {
-    void runSearch(qParam)
-  }, [qParam, runSearch])
 
   return (
     <div className="page">
@@ -81,9 +64,9 @@ export function ReadSearchPage() {
           </Link>
         </div>
         <div className="muted" style={{ marginTop: 10 }}>
-          {q ? `关键词：${q}` : '关键词：全部'}
-          {category ? ` · 品类：${category}` : ''}
-          {difficulty ? ` · 难度：${difficulty}` : ''}
+          {qParam ? `关键词：${qParam}` : '关键词：全部'}
+          {categoryParam ? ` · 品类：${categoryParam}` : ''}
+          {difficultyParam ? ` · 难度：${difficultyParam}` : ''}
           {minHeat ? ` · 热度≥${minHeat}` : ''}
         </div>
       </section>
@@ -91,7 +74,7 @@ export function ReadSearchPage() {
       <section className="section">
         <div className="section-head">
           <h2 className="h2">搜索结果</h2>
-          <span className="muted">{loading ? '加载中…' : '999+ 条'}</span>
+          <span className="muted">{booksQuery.isLoading ? '加载中…' : `${results.length} 条`}</span>
         </div>
 
         <div className="list">
@@ -116,18 +99,18 @@ export function ReadSearchPage() {
                   <button
                     className="btn"
                     onClick={() => {
-                      const inShelf = isInShelf(user.id, b.id)
-                      if (inShelf) {
-                        removeFromShelf(user.id, b.id)
-                        toast.push('已从书架移除', 'success')
-                      } else {
-                        addToShelf(user.id, b.id)
-                        toast.push('已加入书架', 'success')
+                      if (!userId) {
+                        toast.push('请先登录', 'error')
+                        return
                       }
-                      setShelfTick((v) => v + 1)
+                      if (shelfSet.has(b.id)) {
+                        removeShelf.mutate({ userId, bookId: b.id }, { onSuccess: () => toast.push('已从书架移除', 'success') })
+                      } else {
+                        addShelf.mutate({ userId, bookId: b.id }, { onSuccess: () => toast.push('已加入书架', 'success') })
+                      }
                     }}
                   >
-                    {isInShelf(user.id, b.id) ? '移出书架' : '加入书架'}
+                    {shelfSet.has(b.id) ? '移出书架' : '加入书架'}
                   </button>
                   <button
                     className="btn"
@@ -142,7 +125,7 @@ export function ReadSearchPage() {
               </div>
             </div>
           ))}
-          {!loading && results.length === 0 ? (
+          {!booksQuery.isLoading && results.length === 0 ? (
             <div className="empty">
               暂无结果。试试换个关键词，或调整筛选条件。
             </div>
