@@ -121,7 +121,6 @@ if (typeof document !== 'undefined') {
   document.head.appendChild(styleSheet)
 }
 
-
 function normalizeError(e: unknown) {
   const err = e as Partial<AuthApiError> | undefined
   if (err?.message) return err.message
@@ -136,7 +135,6 @@ export function LoginPage() {
   const from = useMemo(() => params.get('from') ?? '/', [params])
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [remember, setRemember] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -158,7 +156,7 @@ export function LoginPage() {
     
     setSubmitting(true)
     try {
-      await loginWithPassword({ email: emailValue, password, remember })
+      await loginWithPassword({ email: emailValue, password })
       navigate(from, { replace: true })
     } catch (err) {
       setError(normalizeError(err))
@@ -316,24 +314,7 @@ export function LoginPage() {
                   }}
                 />
               </div>
-              <div style={{ 
-                display: 'flex', 
-                gap: '12px', 
-                alignItems: 'center',
-                animation: 'fadeIn 0.6s ease-out 0.6s both'
-              }}>
-                <input 
-                  type="checkbox" 
-                  checked={remember} 
-                  onChange={(e) => setRemember(e.target.checked)}
-                  style={{
-                    width: '16px',
-                    height: '16px',
-                    accentColor: 'var(--accent)'
-                  }}
-                />
-                <span style={{ fontSize: '13px', color: 'var(--text)' }}>记住登录状态</span>
-              </div>
+              
               {error ? (
                 <div style={{ 
                   color: 'var(--danger)', 
@@ -363,77 +344,7 @@ export function LoginPage() {
                 {submitting || state.status === 'loading' ? '登录中...' : '登录'}
               </button>
               
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                margin: '20px 0',
-                animation: 'fadeIn 0.6s ease-out 0.8s both'
-              }}>
-                <div style={{ flex: 1, height: '1px', background: 'var(--border)' }}></div>
-                <span style={{ margin: '0 16px', fontSize: '12px', color: 'var(--muted)' }}>其他登录方式</span>
-                <div style={{ flex: 1, height: '1px', background: 'var(--border)' }}></div>
-              </div>
-              
-              <div className="social-login" style={{ 
-                display: 'flex', 
-                justifyContent: 'center', 
-                gap: '16px',
-                animation: 'fadeIn 0.6s ease-out 1s both'
-              }}>
-                <button 
-                  className="btn" 
-                  style={{ 
-                    padding: '10px 20px', 
-                    borderRadius: 'var(--radius-sm)', 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center',
-                    background: '#07C160',
-                    color: '#fff',
-                    fontSize: '12px',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onClick={() => alert('微信登录功能开发中')}
-                >
-                  微信
-                </button>
-                <button 
-                  className="btn" 
-                  style={{ 
-                    padding: '10px 20px', 
-                    borderRadius: 'var(--radius-sm)', 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center',
-                    background: '#12B7F5',
-                    color: '#fff',
-                    fontSize: '12px',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onClick={() => alert('QQ登录功能开发中')}
-                >
-                  QQ
-                </button>
-                <button 
-                  className="btn" 
-                  style={{ 
-                    padding: '10px 20px', 
-                    borderRadius: 'var(--radius-sm)', 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center',
-                    background: '#24292E',
-                    color: '#fff',
-                    fontSize: '12px',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onClick={() => alert('GitHub登录功能开发中')}
-                >
-                  GitHub
-                </button>
-              </div>
-              
-              <div className="login-links" style={{ 
+                <div className="login-links" style={{ 
                 display: 'flex', 
                 justifyContent: 'space-between', 
                 marginTop: '20px',
