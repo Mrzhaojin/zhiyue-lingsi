@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { getDbSnapshot, listBooks, listNotes, listPosts } from '../data/db'
+import { useBooks } from '../features/library/queries'
+import { useNotes } from '../features/notes/queries'
+import { usePosts } from '../features/posts/queries'
 import { BookCover } from '../components/BookCover'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
 import { SearchIcon } from '../ui/SearchIcon'
@@ -13,7 +15,12 @@ function pillList(items: string[]) {
 export function SearchPage() {
   const navigate = useNavigate()
   const [q, setQ] = useState('')
-  const db = getDbSnapshot()
+  const booksQuery = useBooks({ limit: 100 })
+  const postsQuery = usePosts({ sort: 'hot', limit: 100 })
+  const notesQuery = useNotes({ sort: 'hot', onlyPublished: true, limit: 100 })
+  const books = booksQuery.data?.items ?? []
+  const posts = postsQuery.data?.items ?? []
+  const notes = notesQuery.data?.items ?? []
 
   const hotSearch = pillList([
     '匠心书单',
@@ -27,20 +34,25 @@ export function SearchPage() {
     '每日阅读打卡',
   ])
 
-  const bookRank = listBooks()
-    .slice()
-    .sort((a, b) => b.recommendedHeat - a.recommendedHeat)
-    .slice(0, 8)
+  const bookRank = [...books].sort((a, b) => b.recommendedHeat - a.recommendedHeat).slice(0, 8)
 
   const byCount = new Map<string, number>()
-  Object.values(db.posts).forEach((p) => p.tags.forEach((t) => byCount.set(t, (byCount.get(t) ?? 0) + 1)))
-  Object.values(db.notes).forEach((n) => n.tags.forEach((t) => byCount.set(t, (byCount.get(t) ?? 0) + 1)))
+  posts.forEach((p) => p.tags.forEach((t) => byCount.set(t, (byCount.get(t) ?? 0) + 1)))
+  notes.forEach((n) => n.tags.forEach((t) => byCount.set(t, (byCount.get(t) ?? 0) + 1)))
   const topicRank = Array.from(byCount.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8)
 
-  const hotNotes = listNotes('hot').slice(0, 8)
-  const hotPosts = listPosts('hot').slice(0, 8)
+  const hotNotes = notes.slice(0, 8)
+  const hotPosts = posts.slice(0, 8)
+
+  if (booksQuery.isLoading || postsQuery.isLoading || notesQuery.isLoading) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载中…</div></div>
+  }
+  const loadError = booksQuery.error ?? postsQuery.error ?? notesQuery.error
+  if (loadError) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载失败：{loadError instanceof Error ? loadError.message : '未知错误'}</div></div>
+  }
 
   return (
     <div className="page">

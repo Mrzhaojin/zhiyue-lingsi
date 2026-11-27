@@ -23,6 +23,7 @@ export type ListPostsInput = {
   limit: number
   authorId?: string
   topic?: string
+  query?: string
 }
 
 export type NewPostInput = Pick<Post, 'authorId' | 'title' | 'contentText' | 'imageUrls' | 'tags'>
@@ -38,7 +39,15 @@ export interface PostRepository {
   recordView(id: string): Promise<void>
 }
 
-export type ListNotesInput = { sort: 'latest' | 'hot'; limit: number; cursor?: Cursor; onlyPublished?: boolean }
+export type ListNotesInput = {
+  sort: 'latest' | 'hot'
+  limit: number
+  cursor?: Cursor
+  onlyPublished?: boolean
+  authorId?: string
+  topic?: string
+  query?: string
+}
 
 export interface NoteRepository {
   list(input: ListNotesInput): Promise<PageResult<Note>>
@@ -54,7 +63,14 @@ export interface InteractionRepository {
   listByUser(userId: string, kind: Interaction['kind']): Promise<Array<{ targetType: Interaction['targetType']; targetId: string; createdAt: number }>>
 }
 
-export type BookFilter = { category?: string; language?: string; query?: string; limit: number; cursor?: Cursor }
+export type BookFilter = {
+  category?: string
+  difficulty?: string
+  language?: string
+  query?: string
+  limit: number
+  cursor?: Cursor
+}
 
 export interface BookRepository {
   list(filter: BookFilter): Promise<PageResult<Book>>

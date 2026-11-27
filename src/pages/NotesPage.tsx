@@ -1,6 +1,8 @@
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { useState, useEffect } from 'react'
-import { getCurrentUser, getDbSnapshot, listDraftNotesByUser, listNotes, toggleInteraction, hasInteraction } from '../data/db'
+import { useAuth } from '../modules/auth/client'
+import { useDrafts, useNotes } from '../features/notes/queries'
+import { useInteractions, useToggleInteraction } from '../features/interactions/queries'
+import { useProfiles } from '../features/profiles/queries'
 import { formatTime } from '../lib/format'
 import { Search, Flame, Clock, ThumbsUp, Star, PenTool } from 'lucide-react'
 
@@ -11,20 +13,29 @@ function getAvatarColor(id: string) {
 }
 
 export function NotesPage() {
-  const user = getCurrentUser()
-  const db = getDbSnapshot()
+  const { state } = useAuth()
+  const userId = state.status === 'authenticated' ? state.user.id : ''
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const tab = (params.get('tab') ?? 'published') as 'published' | 'draft'
   const sort = (params.get('sort') ?? 'hot') as 'hot' | 'latest'
-  const [notes, setNotes] = useState(() => tab === 'draft' ? listDraftNotesByUser(user.id) : listNotes(sort, true))
 
-  useEffect(() => {
-    const loadNotes = () => {
-      setNotes(tab === 'draft' ? listDraftNotesByUser(user.id) : listNotes(sort, true))
-    }
-    loadNotes()
-  }, [tab, sort, user.id])
+  const publishedQuery = useNotes({ sort, onlyPublished: true, limit: 100 })
+  const draftsQuery = useDrafts(userId)
+  const notes = tab === 'draft' ? draftsQuery.data ?? [] : publishedQuery.data?.items ?? []
+  const authors = useProfiles(notes.map((note) => note.authorId)).data ?? {}
+  const likes = useInteractions(userId, 'like').data ?? []
+  const collects = useInteractions(userId, 'collect').data ?? []
+  const likedSet = new Set(likes.filter((item) => item.targetType === 'note').map((item) => item.targetId))
+  const collectedSet = new Set(collects.filter((item) => item.targetType === 'note').map((item) => item.targetId))
+  const toggle = useToggleInteraction()
+
+  const loading = tab === 'draft' ? draftsQuery.isLoading : publishedQuery.isLoading
+  const error = tab === 'draft' ? draftsQuery.error : publishedQuery.error
+  if (loading) return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载笔记中…</div></div>
+  if (error) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载失败：{error instanceof Error ? error.message : '未知错误'}</div></div>
+  }
 
   return (
     <div className="page">
@@ -81,7 +92,7 @@ export function NotesPage() {
       <section className="section">
         <div className="list">
           {notes.map((n) => {
-            const author = db.users[n.authorId] ?? (n.authorId === user.id ? user : undefined)
+            const author = authors[n.authorId]
             return (
               <Link key={n.id} className="card" to={`/notes/${n.id}/edit`} style={{ position: 'relative', overflow: 'hidden' }}>
                 {n.status === 'draft' && (
@@ -189,18 +200,16 @@ export function NotesPage() {
                     <span className="row gap" style={{ gap: '4px', cursor: 'pointer' }} onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      toggleInteraction(user.id, 'like', 'note', n.id);
-                      setNotes(tab === 'draft' ? listDraftNotesByUser(user.id) : listNotes(sort, true));
+                      toggle.mutate({ userId, kind: 'like', targetType: 'note', targetId: n.id });
                     }}>
-                      <ThumbsUp size={12} style={{ color: hasInteraction(user.id, 'like', 'note', n.id) ? '#f59e0b' : undefined }} /> {n.stats.likes}
+                      <ThumbsUp size={12} style={{ color: likedSet.has(n.id) ? '#f59e0b' : undefined }} /> {n.stats.likes}
                     </span>
                     <span className="row gap" style={{ gap: '4px', cursor: 'pointer' }} onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      toggleInteraction(user.id, 'collect', 'note', n.id);
-                      setNotes(tab === 'draft' ? listDraftNotesByUser(user.id) : listNotes(sort, true));
+                      toggle.mutate({ userId, kind: 'collect', targetType: 'note', targetId: n.id });
                     }}>
-                      <Star size={12} style={{ color: hasInteraction(user.id, 'collect', 'note', n.id) ? '#f59e0b' : undefined }} /> {n.stats.collects}
+                      <Star size={12} style={{ color: collectedSet.has(n.id) ? '#f59e0b' : undefined }} /> {n.stats.collects}
                     </span>
                   </div>
                 </div>

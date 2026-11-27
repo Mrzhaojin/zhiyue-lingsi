@@ -21,3 +21,10 @@ export function useToggleInteraction() {
       repositories.interactions.toggle(input.userId, input.kind, input.targetType, input.targetId),
   })
 }
+export function useInteractions(userId: string | undefined, kind: Interaction['kind']) {
+  return useQuery({
+    queryKey: ['interactions', userId, kind],
+    queryFn: () => repositories.interactions.listByUser(userId as string, kind),
+    enabled: Boolean(userId),
+  })
+}

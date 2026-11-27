@@ -97,9 +97,11 @@ function noteScore(note: Note): number {
 
 function paginatePosts(posts: Post[], input: ListPostsInput): PageResult<Post> {
   const cursor = parseCursor(input.cursor ?? null)
+  const query = input.query?.trim().toLowerCase()
   const filtered = posts.filter((post) => {
     if (input.authorId && post.authorId !== input.authorId) return false
     if (input.topic && !post.tags.includes(input.topic)) return false
+    if (query && !`${post.title} ${post.contentText}`.toLowerCase().includes(query)) return false
     return true
   })
 
@@ -124,8 +126,15 @@ function paginatePosts(posts: Post[], input: ListPostsInput): PageResult<Post> {
 
 function paginateNotes(notes: Note[], input: ListNotesInput): PageResult<Note> {
   const cursor = parseCursor(input.cursor ?? null)
+  const query = input.query?.trim().toLowerCase()
+  const filtered = notes.filter((note) => {
+    if (input.authorId && note.authorId !== input.authorId) return false
+    if (input.topic && !note.tags.includes(input.topic)) return false
+    if (query && !`${note.title} ${note.contentText}`.toLowerCase().includes(query)) return false
+    return true
+  })
   const score = (note: Note) => (input.sort === 'latest' ? note.createdAt : noteScore(note))
-  const sorted = [...notes].sort((a, b) => {
+  const sorted = [...filtered].sort((a, b) => {
     const diff = score(b) - score(a)
     if (diff !== 0) return diff
     return a.id < b.id ? 1 : -1
@@ -212,6 +221,7 @@ const books: BookRepository = {
     const query = filter.query?.trim().toLowerCase()
     const matched = listBooks().filter((book) => {
       if (filter.category && book.category !== filter.category) return false
+      if (filter.difficulty && book.difficulty !== filter.difficulty) return false
       if (filter.language && book.language !== filter.language) return false
       if (query) {
         const haystack = `${book.title} ${book.author} ${book.summary}`.toLowerCase()
