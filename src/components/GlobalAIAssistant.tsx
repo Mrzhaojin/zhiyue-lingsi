@@ -5,6 +5,10 @@ import { BookCover } from './BookCover'
 import { streamDoubaoAPI, type AIAssistantHistoryItem } from '../services/ai'
 import { useToast } from '../ui/useToast'
 import { useAuth } from '../modules/auth/client'
+import { readSession, readStorage, writeSession, writeStorage } from '../lib/storage'
+import { createLogger } from '../lib/logger'
+
+const log = createLogger('ai-assistant')
 
 type ChatMessage = {
   id: string
@@ -25,12 +29,12 @@ export function GlobalAIAssistant() {
 
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
-  const [threadId, setThreadId] = useState<string | null>(() => sessionStorage.getItem('rf_ai_thread_id'))
+  const [threadId, setThreadId] = useState<string | null>(() => readSession<string | null>('rf_ai_thread_id', null))
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    const savedMessages = localStorage.getItem(chatStorageKey)
+    const savedMessages = readStorage<ChatMessage[] | null>(chatStorageKey, null)
     if (savedMessages) {
       try {
-        return JSON.parse(savedMessages)
+        return savedMessages
       } catch {
         // 如果解析失败，使用默认消息
         return [
@@ -86,13 +90,9 @@ export function GlobalAIAssistant() {
     })
   }, [threadId])
 
-  // 保存聊天记录到localStorage（按用户隔离）
+  // 保存聊天记录（按用户隔离）；写入失败由 storage 层统一提示
   useEffect(() => {
-    try {
-      localStorage.setItem(chatStorageKey, JSON.stringify(messages))
-    } catch {
-      // 配额满时不阻断对话，由 storage 层的统一提示负责
-    }
+    writeStorage(chatStorageKey, messages)
   }, [messages, chatStorageKey])
 
   useEffect(() => {
@@ -160,7 +160,7 @@ export function GlobalAIAssistant() {
     const ensureThreadId = () => {
       if (threadId) return threadId
       const t = createAIChatThread(user.id, location.pathname.startsWith('/read/') ? '阅读页对话' : '阅读AI对话')
-      sessionStorage.setItem('rf_ai_thread_id', t.id)
+      writeSession('rf_ai_thread_id', t.id)
       setThreadId(t.id)
       return t.id
     }
@@ -217,7 +217,7 @@ export function GlobalAIAssistant() {
           content: responseContent,
         })
       } catch (error) {
-        console.error('AI回复失败:', error)
+        log.error('AI 回复失败:', error)
         // 更新消息为错误提示
         const message = error instanceof Error && error.message ? error.message : 'AI 回复失败，请稍后重试'
         setMessages((prev) => prev.map((msg) =>
@@ -325,10 +325,8 @@ export function GlobalAIAssistant() {
                       },
                     ]
                     setMessages(welcomeMsg)
-                    // 清空localStorage中的聊天记录
-                    localStorage.removeItem('rf_ai_chat_messages')
-                    // 重新保存欢迎消息
-                    localStorage.setItem('rf_ai_chat_messages', JSON.stringify(welcomeMsg))
+                    // 写入当前用户的 key；旧版本这里误用了全局 key，会把别人的记录一起清掉
+                    writeStorage(chatStorageKey, welcomeMsg)
                   }}
                   style={{
                     border: '1px solid var(--border)',

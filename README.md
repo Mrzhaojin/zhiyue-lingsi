@@ -2,8 +2,8 @@
 
 一个**离线优先**的阅读工作台：阅读器、读书笔记、社区讨论，以及一个基于书库上下文的 AI 阅读助手。
 
-> 这个仓库正在从「前端演示」重构为「可讲清楚的数据层 + AI 工程」。
-> 重构计划与问题清单见 [`analysis/00-总体分析报告.md`](analysis/00-总体分析报告.md)，架构决策见 [`docs/adr/`](docs/adr/)。
+> 这个仓库正在从「前端演示」重构为**可长期维护的应用**：分层边界、数据迁移、错误处理、测试与 CI。
+> 工程约定见 [`docs/ENGINEERING.md`](docs/ENGINEERING.md)，架构见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)，决策见 [`docs/adr/`](docs/adr/)。
 
 ## 快速开始
 
@@ -16,11 +16,14 @@ npm run dev
 输入任意邮箱 + 至少 6 位密码就能使用，数据只保存在当前浏览器。
 
 ```bash
+npm run verify      # 一键跑完：typecheck + lint + test + build
 npm run typecheck   # tsc -b，类型检查
-npm run lint        # ESLint
+npm run lint        # ESLint（含分层边界规则）
 npm test            # Vitest（数据层 + 认证）
 npm run build       # 生产构建
 ```
+
+CI 在每次 push / PR 时执行同一套门禁，并附带 gitleaks 密钥扫描。
 
 ## 两种运行时模式
 
@@ -57,6 +60,13 @@ docs/
   archive/        # 已下线的实现（自研认证服务端）
 analysis/         # 重构前的尽调报告（历史资料）
 ```
+
+## 工程约定
+
+- 分层与依赖方向：见 [`docs/ENGINEERING.md`](docs/ENGINEERING.md)（ESLint 强制：页面不得依赖存储实现、禁止裸用 localStorage、数据层禁止 console）。
+- 数据写入必须经过 `mutate(db, ctx)` 并登记实体级操作，禁止只改内存不落盘。
+- 表结构变更必须带版本号、迁移函数与迁移测试，失败不写回。
+- 渲染异常由全局 `ErrorBoundary` 兜底；日志统一走 `lib/logger`。
 
 ## 已知限制（诚实清单）
 

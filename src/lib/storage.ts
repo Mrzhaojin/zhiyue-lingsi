@@ -84,3 +84,21 @@ export function getLocalStorageBytes(key: string): number {
     return 0
   }
 }
+export function readSession<T>(key: string, fallback: T): T {
+  if (typeof window === 'undefined') return fallback
+  try {
+    const parsed = safeJsonParse<T>(window.sessionStorage.getItem(key))
+    return parsed ?? fallback
+  } catch {
+    return fallback
+  }
+}
+
+export function writeSession<T>(key: string, value: T): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // 会话存储失败不影响主流程
+  }
+}

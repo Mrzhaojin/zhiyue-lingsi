@@ -5,6 +5,7 @@ import { formatTime } from '../lib/format'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
 import { useToast } from '../ui/useToast'
 import { useDatabaseVersion } from '../data/useDatabaseVersion'
+import { writeSession } from '../lib/storage'
 
 export function AIChatHistoryPage() {
   const toast = useToast()
@@ -56,7 +57,7 @@ export function AIChatHistoryPage() {
                     <button
                       className="btn"
                       onClick={() => {
-                        sessionStorage.setItem('rf_ai_thread_id', t.id)
+                        writeSession('rf_ai_thread_id', t.id)
                         toast.push('已切换到该对话，打开AI助手继续即可', 'success')
                       }}
                     >

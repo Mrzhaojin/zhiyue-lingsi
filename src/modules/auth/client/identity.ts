@@ -1,4 +1,7 @@
 import { ensureUserRecord } from '../../../data/db'
+import { createLogger } from '../../../lib/logger'
+
+const log = createLogger('auth-identity')
 import type { AuthUser } from './types'
 
 /**
@@ -14,6 +17,6 @@ export function syncIdentity(user: AuthUser): void {
     })
   } catch (error) {
     // 身份绑定失败不应阻断登录：页面会退化为只读的访客数据
-    console.error('Failed to bind identity to local data layer:', error)
+    log.error('身份绑定到数据层失败:', error)
   }
 }
