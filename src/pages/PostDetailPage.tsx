@@ -112,7 +112,7 @@ export function PostDetailPage() {
               <button
                 className="btn danger"
                 onClick={() => {
-                  if (!window.confirm('确定删除这篇帖子？当前版本删除后不可恢复。')) return
+                  if (!window.confirm('确定删除这篇帖子？30 天内可在回收站恢复。')) return
                   deleteMutation.mutate(post.id, {
                     onSuccess: () => {
                       toast.push('已删除帖子', 'success')

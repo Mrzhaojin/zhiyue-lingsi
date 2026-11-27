@@ -131,9 +131,9 @@ export class ZhiyueDatabase extends Dexie {
 }
 
 function toStoredBook(book: Book): StoredBook {
-  const stored = { ...book } as Book & { chapters?: Chapter[] }
+  const stored = { ...book } as unknown as Omit<Book, 'chapters'> & { chapters?: Chapter[] }
   delete stored.chapters
-  return { ...stored, source: stored.source ?? { ...DEFAULT_BOOK_SOURCE } }
+  return { ...stored, source: stored.source ?? { ...DEFAULT_BOOK_SOURCE } } as StoredBook
 }
 
 export const dexie = new ZhiyueDatabase()

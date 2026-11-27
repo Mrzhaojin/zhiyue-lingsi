@@ -26,8 +26,8 @@ export function NotesPage() {
   const authors = useProfiles(notes.map((note) => note.authorId)).data ?? {}
   const likes = useInteractions(userId, 'like').data ?? []
   const collects = useInteractions(userId, 'collect').data ?? []
-  const likedSet = new Set(likes.filter((item) => item.targetType === 'note').map((item) => item.targetId))
-  const collectedSet = new Set(collects.filter((item) => item.targetType === 'note').map((item) => item.targetId))
+  const likedSet = new Set(likes.map((item) => item.targetId))
+  const collectedSet = new Set(collects.map((item) => item.targetId))
   const toggle = useToggleInteraction()
 
   const loading = tab === 'draft' ? draftsQuery.isLoading : publishedQuery.isLoading
@@ -202,14 +202,14 @@ export function NotesPage() {
                       e.stopPropagation();
                       toggle.mutate({ userId, kind: 'like', targetType: 'note', targetId: n.id });
                     }}>
-                      <ThumbsUp size={12} style={{ color: likedSet.has(n.id) ? '#f59e0b' : undefined }} /> {n.stats.likes}
+                      <ThumbsUp size={12} style={{ color: n.publishedPostId && likedSet.has(n.publishedPostId) ? '#f59e0b' : undefined }} /> {n.stats.likes}
                     </span>
                     <span className="row gap" style={{ gap: '4px', cursor: 'pointer' }} onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       toggle.mutate({ userId, kind: 'collect', targetType: 'note', targetId: n.id });
                     }}>
-                      <Star size={12} style={{ color: collectedSet.has(n.id) ? '#f59e0b' : undefined }} /> {n.stats.collects}
+                      <Star size={12} style={{ color: n.publishedPostId && collectedSet.has(n.publishedPostId) ? '#f59e0b' : undefined }} /> {n.stats.collects}
                     </span>
                   </div>
                 </div>

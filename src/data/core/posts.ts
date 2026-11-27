@@ -1,12 +1,32 @@
 import { nanoid } from 'nanoid'
-import type { Comment, Post, User } from '../../domain/models'
+import type { Comment, Note, Post, User } from '../../domain/models'
+import type { Database } from '../db/schema'
 import { mutate } from '../db/store'
 import { now, data } from './shared'
+
+/** 过滤软删，并把引用型帖子的正文/标题/图片/标签从笔记取回。 */
+export function hydratePost(db: Database, post: Post): Post | undefined {
+  if (post.deletedAt) return undefined
+  if (post.kind === 'note' && post.noteId) {
+    const note: Note | undefined = db.notes[post.noteId]
+    if (!note || note.deletedAt) return undefined
+    return {
+      ...post,
+      title: note.title,
+      contentText: note.contentText,
+      imageUrls: note.imageUrls,
+      tags: note.tags,
+    }
+  }
+  return post
+}
 
 export function listPosts(sort: 'latest' | 'hot'): Post[] {
   const db = data()
   const pinned = new Set(db.admin.pinnedPostIds)
   const posts = Object.values(db.posts)
+    .map((post) => hydratePost(db, post))
+    .filter((post): post is Post => Boolean(post))
   const scored =
     sort === 'latest'
       ? posts.sort((a, b) => b.createdAt - a.createdAt)
@@ -21,12 +41,14 @@ export function listPosts(sort: 'latest' | 'hot'): Post[] {
 }
 
 export function getPost(postId: string): Post | undefined {
-  return data().posts[postId]
+  const db = data()
+  const post = db.posts[postId]
+  return post ? hydratePost(db, post) : undefined
 }
 
 export function incrementPostView(postId: string) {
   const post = data().posts[postId]
-  if (!post) return
+  if (!post || post.deletedAt) return
   mutate((db, ctx) => {
     const next: Post = { ...post, stats: { ...post.stats, views: post.stats.views + 1 } }
     db.posts[postId] = next
@@ -35,22 +57,23 @@ export function incrementPostView(postId: string) {
 }
 
 export function listComments(postId: string): Comment[] {
+  const post = data().posts[postId]
+  if (!post || post.deletedAt) return []
   return Object.values(data().comments)
-    .filter((c) => c.postId === postId)
+    .filter((comment) => comment.postId === postId && !comment.deletedAt)
     .sort((a, b) => a.createdAt - b.createdAt)
 }
 
 export function addComment(input: Omit<Comment, 'id' | 'createdAt'>): Comment {
+  const post = data().posts[input.postId]
+  if (!post || post.deletedAt) throw new Error('帖子不存在或已删除')
   return mutate((db, ctx) => {
     const comment: Comment = { ...input, id: nanoid(), createdAt: now() }
     db.comments[comment.id] = comment
     ctx.put('comments', comment)
-    const post = db.posts[comment.postId]
-    if (post) {
-      const next: Post = { ...post, stats: { ...post.stats, comments: post.stats.comments + 1 } }
-      db.posts[post.id] = next
-      ctx.put('posts', next)
-    }
+    const next: Post = { ...post, stats: { ...post.stats, comments: post.stats.comments + 1 } }
+    db.posts[post.id] = next
+    ctx.put('posts', next)
     return comment
   })
 }
@@ -59,6 +82,7 @@ export function addPost(input: Omit<Post, 'id' | 'createdAt' | 'updatedAt' | 'st
   return mutate((db, ctx) => {
     const post: Post = {
       ...input,
+      kind: input.kind ?? 'original',
       id: nanoid(),
       createdAt: now(),
       updatedAt: now(),
@@ -78,7 +102,7 @@ export function addPost(input: Omit<Post, 'id' | 'createdAt' | 'updatedAt' | 'st
 
 export function updatePost(postId: string, partial: Partial<Post>) {
   const existing = data().posts[postId]
-  if (!existing) return
+  if (!existing || existing.deletedAt) return
   mutate((db, ctx) => {
     const next: Post = { ...existing, ...partial, updatedAt: now() }
     db.posts[postId] = next
@@ -86,28 +110,17 @@ export function updatePost(postId: string, partial: Partial<Post>) {
   })
 }
 
-/** 删除帖子：级联评论、互动、后台引用，并回退作者计数。 */
-
+/** 软删除：保留评论与互动，30 天内可恢复；立即从所有列表/详情中隐藏。 */
 export function deletePost(postId: string) {
   const db = data()
   const existing = db.posts[postId]
-  if (!existing) return
-  const comments = Object.values(db.comments).filter((c) => c.postId === postId)
-  const interactions = Object.values(db.interactions).filter(
-    (i) => i.targetType === 'post' && i.targetId === postId,
-  )
+  if (!existing || existing.deletedAt) return
+  const author = db.users[existing.authorId]
 
   mutate((db2, ctx) => {
-    delete db2.posts[postId]
-    ctx.del('posts', postId)
-    for (const comment of comments) {
-      delete db2.comments[comment.id]
-      ctx.del('comments', comment.id)
-    }
-    for (const interaction of interactions) {
-      delete db2.interactions[interaction.id]
-      ctx.del('interactions', interaction.id)
-    }
+    const next: Post = { ...existing, deletedAt: now(), updatedAt: now() }
+    db2.posts[postId] = next
+    ctx.put('posts', next)
     const admin = {
       ...db2.admin,
       pinnedPostIds: db2.admin.pinnedPostIds.filter((id) => id !== postId),
@@ -115,14 +128,30 @@ export function deletePost(postId: string) {
     }
     db2.admin = admin
     ctx.meta('admin', admin)
-    const author = db2.users[existing.authorId]
     if (author) {
-      const next: User = {
+      const nextAuthor: User = {
         ...author,
         stats: { ...author.stats, postsCount: Math.max(0, author.stats.postsCount - 1) },
       }
-      db2.users[author.id] = next
-      ctx.put('users', next)
+      db2.users[author.id] = nextAuthor
+      ctx.put('users', nextAuthor)
+    }
+  })
+}
+
+export function restorePost(postId: string) {
+  const db = data()
+  const existing = db.posts[postId]
+  if (!existing || !existing.deletedAt) return
+  const author = db.users[existing.authorId]
+  mutate((db2, ctx) => {
+    const next: Post = { ...existing, deletedAt: undefined, updatedAt: now() }
+    db2.posts[postId] = next
+    ctx.put('posts', next)
+    if (author) {
+      const nextAuthor: User = { ...author, stats: { ...author.stats, postsCount: author.stats.postsCount + 1 } }
+      db2.users[author.id] = nextAuthor
+      ctx.put('users', nextAuthor)
     }
   })
 }

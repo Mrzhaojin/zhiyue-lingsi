@@ -4,8 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Quill from 'quill'
 import 'quill/dist/quill.snow.css'
 import { useAuth } from '../modules/auth/client'
-import { useDeleteNote, useNote, useSaveNote } from '../features/notes/queries'
-import { useCreatePost } from '../features/posts/queries'
+import { useDeleteNote, useNote, usePublishNote, useSaveNote } from '../features/notes/queries'
 import { useAdminConfig, useEnsureTag } from '../features/library/queries'
 import type { NoteTemplate } from '../domain/models'
 import { checkContentAllowed } from '../services/keywordFilter'
@@ -52,7 +51,7 @@ export function NoteEditorPage(props: { mode: 'create' | 'edit' }) {
   const existing = noteQuery.data ?? undefined
   const saveNote = useSaveNote()
   const deleteNote = useDeleteNote()
-  const createPost = useCreatePost()
+  const publishNote = usePublishNote()
   const ensureTag = useEnsureTag()
   const adminQuery = useAdminConfig()
 
@@ -65,7 +64,6 @@ export function NoteEditorPage(props: { mode: 'create' | 'edit' }) {
   const [cardBg, setCardBg] = useState('#ffffff')
   const [cardText, setCardText] = useState('#111827')
   const [font, setFont] = useState<'sans' | 'serif' | 'mono'>('sans')
-  const [shareToForum, setShareToForum] = useState(false)
 
   const cardRef = useRef<HTMLDivElement | null>(null)
   const fileRef = useRef<HTMLInputElement | null>(null)
@@ -370,10 +368,6 @@ export function NoteEditorPage(props: { mode: 'create' | 'edit' }) {
                   <option value="mono">极简</option>
                 </select>
               </label>
-              <label className="switch">
-                <input checked={shareToForum} onChange={(e) => setShareToForum(e.target.checked)} type="checkbox" />
-                <span>发布同步到论坛</span>
-              </label>
             </div>
           </div>
 
@@ -411,7 +405,7 @@ export function NoteEditorPage(props: { mode: 'create' | 'edit' }) {
                 const tags = parseTags()
                 await Promise.all(tags.map((tag) => ensureTag.mutateAsync(tag)))
                 const card = await generateCard()
-                const note = await saveNote.mutateAsync({
+                const saved = await saveNote.mutateAsync({
                   id: existing?.id,
                   authorId: userId,
                   title: title.trim() || '未命名笔记',
@@ -419,19 +413,11 @@ export function NoteEditorPage(props: { mode: 'create' | 'edit' }) {
                   tags,
                   imageUrls,
                   template,
-                  status: 'published',
+                  status: 'draft',
                   shareCardDataUrl: card,
                 })
-                if (shareToForum) {
-                  await createPost.mutateAsync({
-                    authorId: userId,
-                    title: `笔记分享：${note.title}`,
-                    contentText: note.contentText.slice(0, 180),
-                    imageUrls: card ? [card] : [],
-                    tags: note.tags,
-                  })
-                }
-                toast.push('已发布', 'success')
+                await publishNote.mutateAsync({ id: saved.id, actorId: userId })
+                toast.push('已发布到社区', 'success')
                 if (params.get('fromReader')) {
                   navigate(-1)
                 } else {

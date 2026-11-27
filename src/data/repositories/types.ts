@@ -35,8 +35,9 @@ export interface PostRepository {
   get(id: string): Promise<Post | null>
   create(input: NewPostInput): Promise<Post>
   update(id: string, patch: PostPatch): Promise<Post>
-  /** M1.5c 起改为软删除；当前实现为物理删除 + 级联清理。 */
+  /** 软删除，30 天内可恢复 */
   remove(id: string): Promise<void>
+  restore(id: string): Promise<void>
   recordView(id: string): Promise<void>
 }
 
@@ -55,7 +56,11 @@ export interface NoteRepository {
   listByAuthor(authorId: string, status?: Note['status']): Promise<Note[]>
   get(id: string): Promise<Note | null>
   save(input: Partial<Note> & Pick<Note, 'authorId' | 'title' | 'contentText'>): Promise<Note>
+  /** 幂等发布：创建/恢复引用型帖子 */
+  publish(id: string, actorId: string): Promise<{ note: Note; post: Post }>
+  unpublish(id: string, actorId: string): Promise<void>
   remove(id: string): Promise<void>
+  restore(id: string): Promise<void>
 }
 
 export interface InteractionRepository {

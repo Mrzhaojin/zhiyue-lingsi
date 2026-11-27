@@ -3,6 +3,7 @@ import {
   addComment,
   addPost,
   deletePost,
+  restorePost,
   ensureUserRecord,
   exportDatabaseJson,
   getCurrentUser,
@@ -81,7 +82,7 @@ describe('IndexedDB 数据层', () => {
     expect(hits).toBe(1)
   })
 
-  it('删除帖子会级联清理评论并回退计数', async () => {
+  it('删除帖子为软删：隐藏但保留评论，可恢复', async () => {
     const user = ensureUserRecord({ id: 'user-1', nickname: '测试读者' })
     const post = addPost({ authorId: user.id, title: '待删除', contentText: 'x', imageUrls: [], tags: [] })
     addComment({ postId: post.id, authorId: user.id, contentText: '评论', imageUrls: [] })
@@ -90,9 +91,16 @@ describe('IndexedDB 数据层', () => {
     deletePost(post.id)
     await store.flush()
 
-    expect(getDbSnapshot().posts[post.id]).toBeUndefined()
-    expect(await dexie.comments.where('postId').equals(post.id).count()).toBe(0)
+    expect(getDbSnapshot().posts[post.id]?.deletedAt).toBeTruthy()
+    expect(listComments(post.id)).toHaveLength(0)
+    expect(await dexie.comments.where('postId').equals(post.id).count()).toBe(1)
     expect(getCurrentUser().stats.postsCount).toBe(0)
+
+    restorePost(post.id)
+    await store.flush()
+    expect(getDbSnapshot().posts[post.id]?.deletedAt).toBeUndefined()
+    expect(listComments(post.id)).toHaveLength(1)
+    expect(getCurrentUser().stats.postsCount).toBe(1)
   })
 
   it('导出后重新导入不丢数据', async () => {

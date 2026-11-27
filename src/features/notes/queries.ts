@@ -34,3 +34,14 @@ export function useSaveNote() {
 export function useDeleteNote() {
   return useMutation({ mutationFn: (id: string) => repositories.notes.remove(id) })
 }
+export function usePublishNote() {
+  return useMutation({
+    mutationFn: (input: { id: string; actorId: string }) => repositories.notes.publish(input.id, input.actorId),
+  })
+}
+
+export function useUnpublishNote() {
+  return useMutation({
+    mutationFn: (input: { id: string; actorId: string }) => repositories.notes.unpublish(input.id, input.actorId),
+  })
+}

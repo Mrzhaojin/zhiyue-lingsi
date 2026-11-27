@@ -12,7 +12,11 @@ import {
   deleteAIChatThread,
   deleteAIAnalysisRecord,
   deleteNote,
+  publishNote,
+  unpublishNote,
+  restoreNote,
   deletePost,
+  restorePost,
   deleteVocabItem,
   ensureUserRecord,
   exportDatabaseJson,
@@ -182,6 +186,9 @@ const posts: PostRepository = {
     if (!getPost(id)) throw new AppError('NOT_FOUND', '帖子不存在或已删除')
     deletePost(id)
   },
+  async restore(id) {
+    restorePost(id)
+  },
   async recordView(id) {
     if (getPost(id)) incrementPostView(id)
   },
@@ -205,9 +212,22 @@ const notes: NoteRepository = {
     if (!input.contentText.trim()) throw new AppError('VALIDATION_ERROR', '正文不能为空')
     return addOrUpdateNote(input)
   },
+  async publish(id, actorId) {
+    const note = getNote(id)
+    if (!note) throw new AppError('NOT_FOUND', '笔记不存在或已删除')
+    const result = publishNote(id, actorId)
+    return { note: getNote(result.note.id) ?? result.note, post: getPost(result.post.id) ?? result.post }
+  },
+  async unpublish(id, actorId) {
+    if (!getNote(id)) throw new AppError('NOT_FOUND', '笔记不存在或已删除')
+    unpublishNote(id, actorId)
+  },
   async remove(id) {
     if (!getNote(id)) throw new AppError('NOT_FOUND', '笔记不存在或已删除')
     deleteNote(id)
+  },
+  async restore(id) {
+    restoreNote(id)
   },
 }
 
