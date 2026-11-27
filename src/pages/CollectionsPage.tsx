@@ -1,14 +1,25 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { getCurrentUser, getDbSnapshot, listUserInteractions } from '../data/db'
+import { useAuth } from '../modules/auth/client'
+import { useInteractions } from '../features/interactions/queries'
+import { useContentByIds } from '../features/content/queries'
 import { formatTime } from '../lib/format'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
 import { ThumbsUp, MessageCircle, Eye } from 'lucide-react'
 
 export function CollectionsPage() {
-  const user = getCurrentUser()
-  const db = getDbSnapshot()
+  const { state } = useAuth()
+  const userId = state.status === 'authenticated' ? state.user.id : ''
   const navigate = useNavigate()
-  const items = listUserInteractions(user.id, 'collect')
+  const itemsQuery = useInteractions(userId, 'collect')
+  const items = itemsQuery.data ?? []
+  const postIds = items.filter((item) => item.targetType === 'post').map((item) => item.targetId)
+  const noteIds = items.filter((item) => item.targetType === 'note').map((item) => item.targetId)
+  const contentQuery = useContentByIds(postIds, noteIds)
+  const postById = new Map((contentQuery.data?.posts ?? []).map((post) => [post.id, post]))
+  const noteById = new Map((contentQuery.data?.notes ?? []).map((note) => [note.id, note]))
+  if (itemsQuery.isLoading) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载中…</div></div>
+  }
 
   return (
     <div className="page">
@@ -28,7 +39,7 @@ export function CollectionsPage() {
         <div className="list">
           {items.map((it) => {
             if (it.targetType === 'post') {
-              const p = db.posts[it.targetId]
+              const p = postById.get(it.targetId)
               if (!p) return null
               return (
                 <Link key={it.targetId} className="card" to={`/forum/${p.id}`}>
@@ -43,7 +54,7 @@ export function CollectionsPage() {
                 </Link>
               )
             }
-            const n = db.notes[it.targetId]
+            const n = noteById.get(it.targetId)
             if (!n) return null
             return (
               <Link key={it.targetId} className="card" to={`/notes/${n.id}/edit`}>

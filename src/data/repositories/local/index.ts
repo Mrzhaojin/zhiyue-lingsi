@@ -34,6 +34,7 @@ import {
   listAIAnalysisRecords,
   listBooks,
   listComments,
+  listContentByTag,
   listNotes,
   listPosts,
   listReadingHistory,
@@ -59,6 +60,7 @@ import type {
   BookFilter,
   BookRepository,
   CommentRepository,
+  ContentRepository,
   Cursor,
   InteractionRepository,
   ListNotesInput,
@@ -344,6 +346,18 @@ const assistant: AssistantRepository = {
   },
 }
 
+const content: ContentRepository = {
+  async byTag(tag) {
+    return listContentByTag(tag)
+  },
+  async postsByIds(ids) {
+    return ids.map((id) => getPost(id)).filter((post): post is Post => Boolean(post))
+  },
+  async notesByIds(ids) {
+    return ids.map((id) => getNote(id)).filter((note): note is Note => Boolean(note))
+  },
+}
+
 const backup: BackupRepository = {
   async exportJson() {
     return exportDatabaseJson()
@@ -372,6 +386,7 @@ export const localRepositories: Repositories = {
   books,
   shelf,
   comments,
+  content,
   profiles,
   reading,
   assistant,

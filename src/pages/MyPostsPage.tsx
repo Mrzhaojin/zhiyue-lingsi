@@ -1,17 +1,20 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { getCurrentUser, getDbSnapshot } from '../data/db'
+import { useAuth } from '../modules/auth/client'
+import { usePosts } from '../features/posts/queries'
 import { formatTime } from '../lib/format'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
 import { ThumbsUp, MessageCircle } from 'lucide-react'
 
 export function MyPostsPage() {
-  const user = getCurrentUser()
-  const db = getDbSnapshot()
+  const { state } = useAuth()
+  const userId = state.status === 'authenticated' ? state.user.id : ''
   const navigate = useNavigate()
 
-  const posts = Object.values(db.posts)
-    .filter((p) => p.authorId === user.id)
-    .sort((a, b) => b.createdAt - a.createdAt)
+  const postsQuery = usePosts({ sort: 'latest', limit: 100, authorId: userId })
+  const posts = postsQuery.data?.items ?? []
+  if (postsQuery.isLoading) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载中…</div></div>
+  }
 
   return (
     <div className="page">

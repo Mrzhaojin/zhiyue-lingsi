@@ -1,14 +1,13 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { listBooks } from '../data/db'
+import { useBooks } from '../features/library/queries'
 import type { BookCategory, ReadingDifficulty } from '../domain/models'
 import { BookCover } from '../components/BookCover'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
 import { SearchIcon } from '../ui/SearchIcon'
 
-type GroupKey = 'time' | 'theme' | 'region' | 'difficulty'
+type GroupKey = 'theme' | 'difficulty'
 
-const timeOptions = ['全部', '2026年', '2025年', '2024年', '2023年', '2022年']
 const themeOptions: Array<{ label: string; value: BookCategory | '全部' }> = [
   { label: '全部', value: '全部' },
   { label: '小说', value: '小说' },
@@ -19,7 +18,6 @@ const themeOptions: Array<{ label: string; value: BookCategory | '全部' }> = [
   { label: '散文', value: '散文' },
   { label: '其他', value: '其他' },
 ]
-const regionOptions = ['全部', '中国', '日本', '韩国', '欧美', '其他']
 const difficultyOptions: Array<{ label: string; value: ReadingDifficulty | '全部' }> = [
   { label: '全部', value: '全部' },
   { label: '入门', value: '入门' },
@@ -46,15 +44,18 @@ function ChipRow(props: { active: string; options: string[]; onPick: (v: string)
 export function CategoriesPage() {
   const navigate = useNavigate()
   const [activeGroup, setActiveGroup] = useState<GroupKey>('theme')
-  const [time, setTime] = useState('全部')
   const [theme, setTheme] = useState<BookCategory | '全部'>('全部')
-  const [region, setRegion] = useState('全部')
   const [difficulty, setDifficulty] = useState<ReadingDifficulty | '全部'>('全部')
 
-  let books = listBooks()
-  if (theme !== '全部') books = books.filter((b) => b.category === theme)
-  if (difficulty !== '全部') books = books.filter((b) => b.difficulty === difficulty)
-  books = books.slice().sort((a, b) => b.recommendedHeat - a.recommendedHeat)
+  const booksQuery = useBooks({
+    ...(theme !== '全部' ? { category: theme } : {}),
+    ...(difficulty !== '全部' ? { difficulty } : {}),
+    limit: 100,
+  })
+  const books = [...(booksQuery.data?.items ?? [])].sort((a, b) => b.recommendedHeat - a.recommendedHeat)
+  if (booksQuery.isLoading) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载中…</div></div>
+  }
 
   return (
     <div className="page">
@@ -75,12 +76,6 @@ export function CategoriesPage() {
           <button className={`tab ${activeGroup === 'theme' ? 'active' : ''}`} onClick={() => setActiveGroup('theme')}>
             主题
           </button>
-          <button className={`tab ${activeGroup === 'time' ? 'active' : ''}`} onClick={() => setActiveGroup('time')}>
-            时间
-          </button>
-          <button className={`tab ${activeGroup === 'region' ? 'active' : ''}`} onClick={() => setActiveGroup('region')}>
-            地区
-          </button>
           <button
             className={`tab ${activeGroup === 'difficulty' ? 'active' : ''}`}
             onClick={() => setActiveGroup('difficulty')}
@@ -100,8 +95,6 @@ export function CategoriesPage() {
           />
         ) : null}
 
-        {activeGroup === 'time' ? <ChipRow active={time} options={timeOptions} onPick={setTime} /> : null}
-        {activeGroup === 'region' ? <ChipRow active={region} options={regionOptions} onPick={setRegion} /> : null}
         {activeGroup === 'difficulty' ? (
           <ChipRow
             active={difficulty}
@@ -115,8 +108,6 @@ export function CategoriesPage() {
 
         <div className="hint" style={{ marginTop: 10 }}>
           当前筛选：{theme === '全部' ? '全部主题' : theme} · {difficulty === '全部' ? '全部难度' : difficulty}
-          {time !== '全部' ? ` · ${time}` : ''}
-          {region !== '全部' ? ` · ${region}` : ''}
         </div>
 
         <div className="row gap wrap" style={{ marginTop: 10 }}>

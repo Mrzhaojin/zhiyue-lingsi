@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { getBook, getCurrentUser, listShelf, removeFromShelf } from '../data/db'
+import { useAuth } from '../modules/auth/client'
+import { useRemoveFromShelf, useShelf } from '../features/shelf/queries'
+import { useBooks } from '../features/library/queries'
 import type { Book } from '../domain/models'
 import { resolveBookCoverUrl } from '../data/bookCovers'
 import { useToast } from '../ui/useToast'
@@ -9,8 +11,16 @@ import { Search } from 'lucide-react'
 export function BookshelfPage() {
   const toast = useToast()
   const navigate = useNavigate()
-  const user = getCurrentUser()
-  const shelf = listShelf(user.id)
+  const { state } = useAuth()
+  const userId = state.status === 'authenticated' ? state.user.id : ''
+  const shelfQuery = useShelf(userId)
+  const booksQuery = useBooks({ limit: 200 })
+  const removeFromShelf = useRemoveFromShelf()
+  const shelf = shelfQuery.data ?? []
+  const bookById = new Map((booksQuery.data?.items ?? []).map((book) => [book.id, book]))
+  if (shelfQuery.isLoading) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载中…</div></div>
+  }
 
   return (
     <div className="page">
@@ -34,7 +44,7 @@ export function BookshelfPage() {
       <section className="section">
         <div className="shelf-grid" style={{ gap: '24px 16px' }}>
           {shelf.map((s) => {
-            const book = getBook(s.bookId)
+            const book = bookById.get(s.bookId)
             if (!book) return null
             return (
               <div key={s.bookId} className="shelf-item">
@@ -52,8 +62,10 @@ export function BookshelfPage() {
                     className="btn"
                     style={{ padding: '2px 8px', minWidth: 'unset', border: 'none', background: 'transparent', fontSize: '10px', color: 'var(--muted)', opacity: 0.6 }}
                     onClick={() => {
-                      removeFromShelf(user.id, book.id)
-                      toast.push('已从书架移除', 'success')
+                      removeFromShelf.mutate({ userId, bookId: book.id }, {
+                        onSuccess: () => toast.push('已从书架移除', 'success'),
+                        onError: (error) => toast.push(error instanceof Error ? error.message : '移除失败', 'error'),
+                      })
                     }}
                   >
                     移除

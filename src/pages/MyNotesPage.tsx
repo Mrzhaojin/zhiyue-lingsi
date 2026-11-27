@@ -1,13 +1,19 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { getCurrentUser, listPublishedNotesByUser } from '../data/db'
+import { useAuth } from '../modules/auth/client'
+import { useNotes } from '../features/notes/queries'
 import { formatTime } from '../lib/format'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
 import { ThumbsUp } from 'lucide-react'
 
 export function MyNotesPage() {
-  const user = getCurrentUser()
+  const { state } = useAuth()
+  const userId = state.status === 'authenticated' ? state.user.id : ''
   const navigate = useNavigate()
-  const notes = listPublishedNotesByUser(user.id).sort((a, b) => b.updatedAt - a.updatedAt)
+  const notesQuery = useNotes({ sort: 'latest', limit: 100, onlyPublished: true, authorId: userId })
+  const notes = [...(notesQuery.data?.items ?? [])].sort((a, b) => b.updatedAt - a.updatedAt)
+  if (notesQuery.isLoading) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载中…</div></div>
+  }
 
   return (
     <div className="page">

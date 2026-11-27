@@ -1,18 +1,20 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { listTags, upsertTagByName } from '../data/db'
+import { useEnsureTag, useTags } from '../features/library/queries'
 import { useToast } from '../ui/useToast'
 
 export function TopicsPage() {
   const toast = useToast()
   const [q, setQ] = useState('')
-  const tags = listTags()
+  const tagsQuery = useTags()
+  const ensureTag = useEnsureTag()
 
   const filtered = useMemo(() => {
+    const tags = tagsQuery.data ?? []
     const query = q.trim()
     if (!query) return tags
     return tags.filter((t) => t.name.includes(query.startsWith('#') ? query : `#${query}`) || t.name.includes(query))
-  }, [q, tags])
+  }, [q, tagsQuery.data])
 
   return (
     <div className="page">
@@ -28,8 +30,10 @@ export function TopicsPage() {
             onClick={() => {
               const name = q.trim()
               if (!name) return
-              const tag = upsertTagByName(name)
-              toast.push(`已创建话题 ${tag.name}`, 'success')
+              ensureTag.mutate(name, {
+                onSuccess: (tag) => toast.push(`已创建话题 ${tag.name}`, 'success'),
+                onError: (error) => toast.push(error instanceof Error ? error.message : '创建话题失败', 'error'),
+              })
             }}
           >
             新建

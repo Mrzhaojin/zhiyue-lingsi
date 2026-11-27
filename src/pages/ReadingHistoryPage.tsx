@@ -1,15 +1,25 @@
 import { useNavigate } from 'react-router-dom'
-import { getCurrentUser, listReadingHistory, getBook, removeReadingHistory } from '../data/db'
+import { useAuth } from '../modules/auth/client'
+import { useRemoveReadingHistory, useReadingHistory } from '../features/reading/queries'
+import { useBooks } from '../features/library/queries'
 import { formatTime } from '../lib/format'
 import { BookCover } from '../components/BookCover'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
 import { useToast } from '../ui/useToast'
 
 export function ReadingHistoryPage() {
-  const user = getCurrentUser()
-  const history = listReadingHistory(user.id)
+  const { state } = useAuth()
+  const userId = state.status === 'authenticated' ? state.user.id : ''
+  const historyQuery = useReadingHistory(userId)
+  const booksQuery = useBooks({ limit: 200 })
+  const removeHistory = useRemoveReadingHistory()
+  const history = historyQuery.data ?? []
+  const bookById = new Map((booksQuery.data?.items ?? []).map((book) => [book.id, book]))
   const navigate = useNavigate()
   const toast = useToast()
+  if (historyQuery.isLoading) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载中…</div></div>
+  }
 
   return (
     <div className="page">
@@ -28,7 +38,7 @@ export function ReadingHistoryPage() {
       <section className="section">
         <div className="list">
           {history.map((h) => {
-            const book = getBook(h.bookId)
+            const book = bookById.get(h.bookId)
             if (!book) return null
             const chapter = book.chapters.find(c => c.id === h.chapterId)
             return (
@@ -46,9 +56,10 @@ export function ReadingHistoryPage() {
                 <div className="row gap">
                    <button className="btn primary" onClick={() => navigate(`/read/${book.id}`)} style={{ padding: '6px 12px', fontSize: '12px' }}>继续</button>
                    <button className="btn" onClick={() => {
-                     removeReadingHistory(user.id, book.id)
-                     toast.push('已删除记录', 'success')
-                     window.location.reload()
+                     removeHistory.mutate({ userId, bookId: book.id }, {
+                       onSuccess: () => toast.push('已删除记录', 'success'),
+                       onError: (error) => toast.push(error instanceof Error ? error.message : '删除失败', 'error'),
+                     })
                    }} style={{ padding: '6px' }}>✕</button>
                 </div>
               </div>

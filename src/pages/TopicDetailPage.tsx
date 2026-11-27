@@ -1,5 +1,6 @@
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom'
-import { getDbSnapshot, listContentByTag } from '../data/db'
+import { useContentByTag } from '../features/content/queries'
+import { useProfiles } from '../features/profiles/queries'
 import { formatTime } from '../lib/format'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
 import { MessageCircle, ThumbsUp, Hash } from 'lucide-react'
@@ -16,8 +17,13 @@ export function TopicDetailPage() {
   const navigate = useNavigate()
   const tab = (params.get('tab') ?? 'hot') as 'hot' | 'latest'
   const normalized = decodeURIComponent(tagName ?? '')
-  const db = getDbSnapshot()
-  const { posts, notes } = listContentByTag(normalized)
+  const contentQuery = useContentByTag(normalized)
+  const content = contentQuery.data ?? { posts: [], notes: [] }
+  const { posts, notes } = content
+  const authors = useProfiles([...posts.map((post) => post.authorId), ...notes.map((note) => note.authorId)]).data ?? {}
+  if (contentQuery.isLoading) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载中…</div></div>
+  }
 
   const sortedPosts =
     tab === 'latest' ? [...posts].sort((a, b) => b.createdAt - a.createdAt) : posts
@@ -68,7 +74,7 @@ export function TopicDetailPage() {
         </div>
         <div className="grid">
           {sortedPosts.map((p) => {
-             const author = db.users[p.authorId];
+             const author = authors[p.authorId];
              return (
               <Link key={p.id} className="card" to={`/forum/${p.id}`} style={{ padding: '20px', borderRadius: 'var(--radius)', background: 'var(--card)', border: '1px solid var(--border)' }}>
                 <div className="row gap" style={{ marginBottom: '16px', gap: '12px' }}>
@@ -93,7 +99,7 @@ export function TopicDetailPage() {
             );
           })}
           {sortedNotes.map((n) => {
-             const author = db.users[n.authorId];
+             const author = authors[n.authorId];
              return (
               <Link key={n.id} className="card" to={`/notes/${n.id}/edit`} style={{ padding: '20px', borderRadius: 'var(--radius)', background: 'var(--card)', border: '1px solid var(--border)' }}>
                 <div className="row gap" style={{ marginBottom: '16px', gap: '12px' }}>

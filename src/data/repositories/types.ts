@@ -120,6 +120,12 @@ export interface AssistantRepository {
   deleteAnalysis(id: string): Promise<void>
 }
 
+export interface ContentRepository {
+  byTag(tag: string): Promise<{ posts: Post[]; notes: Note[] }>
+  postsByIds(ids: string[]): Promise<Post[]>
+  notesByIds(ids: string[]): Promise<Note[]>
+}
+
 export interface BackupRepository {
   exportJson(): Promise<string>
   importJson(json: string): Promise<{ users: number; posts: number; notes: number }>
@@ -138,6 +144,7 @@ export interface Repositories {
   books: BookRepository
   shelf: ShelfRepository
   comments: CommentRepository
+  content: ContentRepository
   profiles: ProfileRepository
   reading: ReadingRepository
   assistant: AssistantRepository
