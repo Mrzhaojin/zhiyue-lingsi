@@ -94,3 +94,12 @@ export function updateCurrentUser(partial: Partial<User>) {
     ctx.put('users', next)
   })
 }
+export function getUsersByIds(ids: string[]): Record<string, User> {
+  const db = data()
+  const result: Record<string, User> = {}
+  for (const id of ids) {
+    const user = db.users[id]
+    if (user) result[id] = user
+  }
+  return result
+}

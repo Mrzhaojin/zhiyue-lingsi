@@ -35,6 +35,7 @@ export interface PostRepository {
   update(id: string, patch: PostPatch): Promise<Post>
   /** M1.5c 起改为软删除；当前实现为物理删除 + 级联清理。 */
   remove(id: string): Promise<void>
+  recordView(id: string): Promise<void>
 }
 
 export type ListNotesInput = { sort: 'latest' | 'hot'; limit: number; cursor?: Cursor; onlyPublished?: boolean }
@@ -78,6 +79,7 @@ export interface ProfileRepository {
   get(id: string): Promise<User | null>
   current(): Promise<User>
   ensure(input: { id: string; nickname: string; role?: 'user' | 'admin' }): Promise<User>
+  listByIds(ids: string[]): Promise<Record<string, User>>
   update(patch: Partial<User>): Promise<User>
 }
 

@@ -41,6 +41,9 @@ import {
   RequirePermission,
 } from './modules/auth/client'
 import { initializeDatabase } from './data/db'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { queryClient } from './app/queryClient'
+import { DataInvalidator } from './app/DataInvalidator'
 import { useEffect, useState, useCallback } from 'react'
 
 function App() {
@@ -99,7 +102,9 @@ function App() {
   const ShellComponent = isMobile ? MobileShell : WebShell
 
   return (
-    <AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <DataInvalidator />
       <ToastProvider>
         <Routes>
           <Route path="/zhiyueling-si/login" element={<LoginPage />} />
@@ -151,7 +156,8 @@ function App() {
         </Routes>
         <GlobalAIAssistant />
       </ToastProvider>
-    </AuthProvider>
+      </AuthProvider>
+    </QueryClientProvider>
   )
 }
 

@@ -23,6 +23,8 @@ import {
   getNote,
   getPost,
   getReadingHistory,
+  getUsersByIds,
+  incrementPostView,
   getUserById,
   hasInteraction,
   importDatabaseJson,
@@ -161,6 +163,9 @@ const posts: PostRepository = {
     if (!getPost(id)) throw new AppError('NOT_FOUND', '帖子不存在或已删除')
     deletePost(id)
   },
+  async recordView(id) {
+    if (getPost(id)) incrementPostView(id)
+  },
 }
 
 const notes: NoteRepository = {
@@ -267,6 +272,9 @@ const profiles: ProfileRepository = {
   },
   async ensure(input) {
     return ensureUserRecord(input)
+  },
+  async listByIds(ids) {
+    return getUsersByIds([...new Set(ids)])
   },
   async update(patch) {
     updateCurrentUser(patch)

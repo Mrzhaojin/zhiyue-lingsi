@@ -1,17 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import {
-  addComment,
-  deletePost,
-  getCurrentUser,
-  getDbSnapshot,
-  getPost,
-  hasInteraction,
-  incrementPostView,
-  listComments,
-  toggleInteraction,
-  updatePost,
-} from '../data/db'
+import { useAuth } from '../modules/auth/client'
+import { useAddComment, useComments } from '../features/comments/queries'
+import { useInteraction, useToggleInteraction } from '../features/interactions/queries'
+import { useDeletePost, usePost, useRecordPostView, useUpdatePost } from '../features/posts/queries'
+import { useProfiles } from '../features/profiles/queries'
 import { formatTime } from '../lib/format'
 import { checkContentAllowed } from '../services/keywordFilter'
 import { useToast } from '../ui/useToast'
@@ -28,29 +21,38 @@ export function PostDetailPage() {
   const { postId } = useParams()
   const toast = useToast()
   const navigate = useNavigate()
-  const user = getCurrentUser()
-  const [post, setPost] = useState<ReturnType<typeof getPost> | undefined>(postId ? getPost(postId) : undefined)
-  const db = getDbSnapshot()
+  const { state } = useAuth()
+  const userId = state.status === 'authenticated' ? state.user.id : ''
 
   const [commentText, setCommentText] = useState('')
   const [replyTo, setReplyTo] = useState<string | undefined>(undefined)
+  const viewedRef = useRef<string | null>(null)
 
-  // 当postId变化时，重新获取帖子数据
+  const postQuery = usePost(postId)
+  const commentsQuery = useComments(postId)
+  const post = postQuery.data ?? undefined
+  const comments = commentsQuery.data ?? []
+
+  const liked = useInteraction(userId, 'like', 'post', postId ?? '').data ?? false
+  const collected = useInteraction(userId, 'collect', 'post', postId ?? '').data ?? false
+
+  const toggle = useToggleInteraction()
+  const addCommentMutation = useAddComment()
+  const deleteMutation = useDeletePost()
+  const updatePostMutation = useUpdatePost()
+  const recordView = useRecordPostView()
+
+  const authorIds = [post?.authorId, ...comments.map((comment) => comment.authorId)].filter(
+    (id): id is string => Boolean(id),
+  )
+  const authors = useProfiles(authorIds).data ?? {}
+
   useEffect(() => {
-    const loadPost = () => {
-      if (postId) {
-        setPost(getPost(postId))
-      }
-    }
-    loadPost()
-  }, [postId])
+    if (!post || viewedRef.current === post.id) return
+    viewedRef.current = post.id
+    recordView.mutate(post.id)
+  }, [post, recordView])
 
-  useEffect(() => {
-    if (!postId) return
-    incrementPostView(postId)
-  }, [postId])
-
-  const comments = postId ? listComments(postId) : []
   const rootComments = comments.filter((c) => !c.parentId)
   const childrenByParent = new Map<string, typeof comments>()
   for (const c of comments) {
@@ -58,6 +60,25 @@ export function PostDetailPage() {
     const list = childrenByParent.get(c.parentId) ?? []
     list.push(c)
     childrenByParent.set(c.parentId, list)
+  }
+
+  if (postQuery.isLoading) {
+    return (
+      <div className="page">
+        <div className="empty" style={{ padding: '60px 0' }}>加载帖子中…</div>
+      </div>
+    )
+  }
+
+  if (postQuery.isError) {
+    return (
+      <div className="page">
+        <div className="empty" style={{ padding: '60px 0' }}>
+          加载失败：{postQuery.error instanceof Error ? postQuery.error.message : '未知错误'}
+        </div>
+        <Link className="btn" to="/forum">返回论坛</Link>
+      </div>
+    )
   }
 
   if (!post) {
@@ -71,10 +92,8 @@ export function PostDetailPage() {
     )
   }
 
-  const author = post ? db.users[post.authorId] : undefined
-  const liked = post ? hasInteraction(user.id, 'like', 'post', post.id) : false
-  const collected = post ? hasInteraction(user.id, 'collect', 'post', post.id) : false
-  const isOwner = post ? user.id === post.authorId : false
+  const author = authors[post.authorId]
+  const isOwner = Boolean(userId && post.authorId === userId)
 
   return (
     <div className="page">
@@ -91,9 +110,14 @@ export function PostDetailPage() {
               <button
                 className="btn danger"
                 onClick={() => {
-                  deletePost(post.id)
-                  toast.push('已删除帖子', 'success')
-                  navigate('/forum')
+                  if (!window.confirm('确定删除这篇帖子？当前版本删除后不可恢复。')) return
+                  deleteMutation.mutate(post.id, {
+                    onSuccess: () => {
+                      toast.push('已删除帖子', 'success')
+                      navigate('/forum')
+                    },
+                    onError: (error) => toast.push(error instanceof Error ? error.message : '删除失败', 'error'),
+                  })
                 }}
               >
                 删除
@@ -144,18 +168,11 @@ export function PostDetailPage() {
               <button
                 className={`btn sm ${liked ? 'primary' : ''}`}
                 onClick={() => {
-                  toggleInteraction(user.id, 'like', 'post', post.id)
-                  // 立即更新本地状态，实现点赞数的实时更新
-                  setPost(prevPost => {
-                    if (!prevPost) return prevPost
-                    return {
-                      ...prevPost,
-                      stats: {
-                        ...prevPost.stats,
-                        likes: liked ? prevPost.stats.likes - 1 : prevPost.stats.likes + 1
-                      }
-                    }
-                  })
+                  if (!userId) {
+                    toast.push('请先登录', 'error')
+                    return
+                  }
+                  toggle.mutate({ userId, kind: 'like', targetType: 'post', targetId: post.id })
                   toast.push(liked ? '已取消点赞' : '已点赞', 'success')
                 }}
                 style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
@@ -166,18 +183,11 @@ export function PostDetailPage() {
                 className={`btn sm ${collected ? 'primary' : ''}`}
                 style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
                 onClick={() => {
-                  toggleInteraction(user.id, 'collect', 'post', post.id)
-                  // 立即更新本地状态，实现收藏数的实时更新
-                  setPost(prevPost => {
-                    if (!prevPost) return prevPost
-                    return {
-                      ...prevPost,
-                      stats: {
-                        ...prevPost.stats,
-                        collects: collected ? prevPost.stats.collects - 1 : prevPost.stats.collects + 1
-                      }
-                    }
-                  })
+                  if (!userId) {
+                    toast.push('请先登录', 'error')
+                    return
+                  }
+                  toggle.mutate({ userId, kind: 'collect', targetType: 'post', targetId: post.id })
                   toast.push(collected ? '已取消收藏' : '已收藏', 'success')
                 }}
               >
@@ -198,20 +208,10 @@ export function PostDetailPage() {
                       await navigator.clipboard.writeText(url)
                       toast.push('链接已复制，可转发', 'success')
                     }
-                    if (post) {
-                      updatePost(post.id, { stats: { ...post.stats, shares: post.stats.shares + 1 } })
-                      // 立即更新本地状态，实现转发数的实时更新
-                      setPost(prevPost => {
-                        if (!prevPost) return prevPost
-                        return {
-                          ...prevPost,
-                          stats: {
-                            ...prevPost.stats,
-                            shares: prevPost.stats.shares + 1
-                          }
-                        }
-                      })
-                    }
+                    updatePostMutation.mutate({
+                      id: post.id,
+                      patch: { stats: { ...post.stats, shares: post.stats.shares + 1 } },
+                    })
                   } catch {
                     toast.push('转发失败', 'error')
                   }
@@ -258,16 +258,27 @@ export function PostDetailPage() {
                 toast.push(`评论包含敏感词：${allowed.hit}，已拦截`, 'error')
                 return
               }
-              addComment({
-                postId: post.id,
-                authorId: user.id,
-                contentText: commentText.trim(),
-                imageUrls: [],
-                parentId: replyTo,
-              })
-              setCommentText('')
-              setReplyTo(undefined)
-              toast.push('已发表', 'success')
+              if (!userId) {
+                toast.push('请先登录', 'error')
+                return
+              }
+              addCommentMutation.mutate(
+                {
+                  postId: post.id,
+                  authorId: userId,
+                  contentText: commentText.trim(),
+                  imageUrls: [],
+                  parentId: replyTo,
+                },
+                {
+                  onSuccess: () => {
+                    setCommentText('')
+                    setReplyTo(undefined)
+                    toast.push('已发表', 'success')
+                  },
+                  onError: (error) => toast.push(error instanceof Error ? error.message : '发表失败', 'error'),
+                },
+              )
             }}
           >
             发表评论
@@ -276,7 +287,7 @@ export function PostDetailPage() {
 
         <div className="comment-list">
           {rootComments.map((c) => {
-            const cAuthor = db.users[c.authorId]
+            const cAuthor = authors[c.authorId]
             const children = childrenByParent.get(c.id) ?? []
             return (
               <div key={c.id} className="comment">
@@ -303,7 +314,7 @@ export function PostDetailPage() {
                 {children.length ? (
                   <div className="comment-children">
                     {children.map((cc) => {
-                      const ccAuthor = db.users[cc.authorId]
+                      const ccAuthor = authors[cc.authorId]
                       return (
                         <div key={cc.id} className="comment child">
                           <div className="row gap" style={{ marginBottom: '4px' }}>

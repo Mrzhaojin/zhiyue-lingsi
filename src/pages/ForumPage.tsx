@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { getDbSnapshot, listPosts, listTags, upsertTagByName } from '../data/db'
+import { useEnsureTag, useTags } from '../features/library/queries'
+import { usePosts } from '../features/posts/queries'
+import { useProfiles } from '../features/profiles/queries'
 import { formatTime } from '../lib/format'
 import { useToast } from '../ui/useToast'
 import { Search, MessageCircle, ThumbsUp } from 'lucide-react'
@@ -17,17 +19,34 @@ export function ForumPage() {
   const [params, setParams] = useSearchParams()
   const tab = (params.get('tab') ?? 'hot') as 'latest' | 'hot' | 'topics'
   const [topicQuery, setTopicQuery] = useState('')
-  // 从数据快照派生：Shell 订阅了数据版本，任何写入后本页会自动重算，不再维护一份会过期的 state
-  const db = getDbSnapshot()
-  const posts = tab === 'topics' ? [] : listPosts(tab)
-  const tags = listTags()
+  const postsQuery = usePosts({ sort: tab === 'topics' ? 'latest' : tab, limit: 50 })
+  const tagsQuery = useTags()
+  const ensureTag = useEnsureTag()
+  const posts = postsQuery.data?.items ?? []
+  const authors = useProfiles(posts.map((post) => post.authorId)).data ?? {}
   
   const filteredTags = useMemo(() => {
+    const tags = tagsQuery.data ?? []
     const q = topicQuery.trim()
     if (!q) return tags
     return tags.filter((t) => t.name.includes(q.startsWith('#') ? q : `#${q}`) || t.name.includes(q))
-  }, [tags, topicQuery])
-  
+  }, [tagsQuery.data, topicQuery])
+
+  if (tab === 'topics' && tagsQuery.isLoading) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载话题中…</div></div>
+  }
+  if (tab !== 'topics' && postsQuery.isLoading) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载帖子中…</div></div>
+  }
+  if (tab !== 'topics' && postsQuery.isError) {
+    return (
+      <div className="page">
+        <div className="empty" style={{ padding: '60px 0' }}>
+          加载失败：{postsQuery.error instanceof Error ? postsQuery.error.message : '未知错误'}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="page">
@@ -87,8 +106,10 @@ export function ForumPage() {
                 onClick={() => {
                   const name = topicQuery.trim()
                   if (!name) return
-                  const tag = upsertTagByName(name)
-                  toast.push(`已创建话题 ${tag.name}`, 'success')
+                  ensureTag.mutate(name, {
+                    onSuccess: (tag) => toast.push(`已创建话题 ${tag.name}`, 'success'),
+                    onError: (error) => toast.push(error instanceof Error ? error.message : '创建话题失败', 'error'),
+                  })
                 }}
                 style={{ borderRadius: 'var(--radius)', background: 'var(--accent)', color: '#fff', border: 'none', padding: '0 20px', fontSize: '13px' }}
               >
@@ -123,7 +144,7 @@ export function ForumPage() {
         ) : (
           <div className="list" style={{ gap: '16px' }}>
             {posts.map((p) => {
-              const author = db.users[p.authorId]
+              const author = authors[p.authorId]
               return (
                 <Link key={p.id} className="card" to={`/forum/${p.id}`} style={{ padding: '20px', borderRadius: 'var(--radius)', background: 'var(--card)', border: '1px solid var(--border)', transition: 'all 0.3s ease' }}>
                   <div className="row gap" style={{ marginBottom: '16px', gap: '12px' }}>
