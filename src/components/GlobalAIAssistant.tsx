@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { addAIChatMessage, addOrUpdateNote, createAIChatThread, listAIChatMessages, listBooks } from '../data/db'
+import { useBooks } from '../features/library/queries'
+import { useAppendMessage, useCreateThread, useThreadMessages } from '../features/assistant/queries'
+import { useSaveNote } from '../features/notes/queries'
 import { BookCover } from './BookCover'
 import { streamDoubaoAPI, type AIAssistantHistoryItem } from '../services/ai'
 import { useToast } from '../ui/useToast'
@@ -63,15 +65,19 @@ export function GlobalAIAssistant() {
   const dragStart = useRef({ x: 0, y: 0 })
   const initialPosition = useRef({ x: 0, y: 0 })
 
-  const booksIndex = useMemo(() => {
-    const all = listBooks()
-    return new Map(all.map((b) => [b.id, b]))
-  }, [])
+  const booksQuery = useBooks({ limit: 200 })
+  const booksIndex = useMemo(
+    () => new Map((booksQuery.data?.items ?? []).map((b) => [b.id, b])),
+    [booksQuery.data],
+  )
+  const threadMessagesQuery = useThreadMessages(threadId ?? '')
+  const createThread = useCreateThread()
+  const appendMessage = useAppendMessage()
+  const saveNote = useSaveNote()
 
   useEffect(() => {
-    if (!threadId) return
-    const list = listAIChatMessages(threadId)
-    if (!list.length) return
+    const list = threadMessagesQuery.data
+    if (!list?.length) return
     setMessages((prev) => {
       const existingIds = new Set(prev.map((m) => m.id))
       const merged = [...prev]
@@ -88,7 +94,7 @@ export function GlobalAIAssistant() {
       merged.sort((a, b) => a.createdAt - b.createdAt)
       return merged
     })
-  }, [threadId])
+  }, [threadMessagesQuery.data])
 
   // 保存聊天记录（按用户隔离）；写入失败由 storage 层统一提示
   useEffect(() => {
@@ -157,16 +163,16 @@ export function GlobalAIAssistant() {
     setMessages((prev) => [...prev, userMsg])
     setInput('')
 
-    const ensureThreadId = () => {
+    const ensureThreadId = async () => {
       if (threadId) return threadId
-      const t = createAIChatThread(user.id, location.pathname.startsWith('/read/') ? '阅读页对话' : '阅读AI对话')
+      const t = await createThread.mutateAsync({
+        userId: user.id,
+        title: location.pathname.startsWith('/read/') ? '阅读页对话' : '阅读AI对话',
+      })
       writeSession('rf_ai_thread_id', t.id)
       setThreadId(t.id)
       return t.id
     }
-
-    const tId = ensureThreadId()
-    addAIChatMessage({ id: userMsg.id, createdAt: userMsg.createdAt, threadId: tId, userId: user.id, role: 'user', content: text })
 
     const historyForAi: AIAssistantHistoryItem[] = [...messages, userMsg]
       .slice(-6)
@@ -184,6 +190,16 @@ export function GlobalAIAssistant() {
 
     void (async () => {
       try {
+        const tId = await ensureThreadId()
+        await appendMessage.mutateAsync({
+          id: userMsg.id,
+          createdAt: userMsg.createdAt,
+          threadId: tId,
+          userId: user.id,
+          role: 'user',
+          content: text,
+        })
+
         // 准备消息历史，转换为豆包API需要的格式
         const messagesForApi = historyForAi.map((m) => ({
           role: m.role,
@@ -208,7 +224,7 @@ export function GlobalAIAssistant() {
         }
 
         // 完成后保存消息
-        addAIChatMessage({
+        await appendMessage.mutateAsync({
           id: assistantMsgId,
           createdAt: tempAssistantMsg.createdAt,
           threadId: tId,
@@ -466,7 +482,7 @@ export function GlobalAIAssistant() {
                         onClick={async () => {
                           if (!user) return
                           const titleBase = msg.content.split('\n')[0]?.slice(0, 18) || 'AI收藏'
-                          const note = await addOrUpdateNote({
+                          const note = await saveNote.mutateAsync({
                             authorId: user.id,
                             title: `AI收藏：${titleBase}`,
                             contentText: msg.content,

@@ -49,6 +49,7 @@ import {
   listVocab,
   removeFromShelf,
   removeReadingHistory,
+  incrementReadingMinutes,
   saveReadingHistory,
   toggleInteraction,
   updateAdminConfig,
@@ -327,6 +328,9 @@ const reading: ReadingRepository = {
   },
   async removeVocab(id) {
     deleteVocabItem(id)
+  },
+  async incrementReadingMinutes(userId, minutes) {
+    incrementReadingMinutes(userId, minutes)
   },
 }
 

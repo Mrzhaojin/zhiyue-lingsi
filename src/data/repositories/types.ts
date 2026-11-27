@@ -110,6 +110,7 @@ export interface ReadingRepository {
   addVocab(input: Omit<VocabItem, 'id' | 'createdAt'>): Promise<VocabItem>
   vocab(userId: string, type?: VocabItem['type']): Promise<VocabItem[]>
   removeVocab(id: string): Promise<void>
+  incrementReadingMinutes(userId: string, minutes: number): Promise<void>
 }
 
 export interface AssistantRepository {

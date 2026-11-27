@@ -36,3 +36,10 @@ export function useAddVocab() {
       repositories.reading.addVocab(input),
   })
 }
+
+export function useIncrementReadingMinutes() {
+  return useMutation({
+    mutationFn: (input: { userId: string; minutes: number }) =>
+      repositories.reading.incrementReadingMinutes(input.userId, input.minutes),
+  })
+}

@@ -1,3 +1,4 @@
+import type { User } from '../../domain/models'
 import type { ReadingHistory } from '../../domain/models'
 import { mutate } from '../db/store'
 import { now, data } from './shared'
@@ -27,5 +28,15 @@ export function removeReadingHistory(userId: string, bookId: string) {
   mutate((db, ctx) => {
     delete db.readingHistory[id]
     ctx.del('readingHistory', id)
+  })
+}
+
+export function incrementReadingMinutes(userId: string, minutes: number) {
+  const user = data().users[userId]
+  if (!user || minutes <= 0) return
+  mutate((db, ctx) => {
+    const next: User = { ...user, stats: { ...user.stats, readingMinutes: user.stats.readingMinutes + minutes } }
+    db.users[userId] = next
+    ctx.put('users', next)
   })
 }

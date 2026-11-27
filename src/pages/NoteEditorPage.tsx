@@ -1,16 +1,12 @@
 import { toPng } from 'html-to-image'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Quill from 'quill'
 import 'quill/dist/quill.snow.css'
-import {
-  addOrUpdateNote,
-  addPost,
-  deleteNote,
-  getCurrentUser,
-  getNote,
-  upsertTagByName,
-} from '../data/db'
+import { useAuth } from '../modules/auth/client'
+import { useDeleteNote, useNote, useSaveNote } from '../features/notes/queries'
+import { useCreatePost } from '../features/posts/queries'
+import { useEnsureTag } from '../features/library/queries'
 import type { NoteTemplate } from '../domain/models'
 import { checkContentAllowed } from '../services/keywordFilter'
 import { useToast } from '../ui/useToast'
@@ -46,12 +42,19 @@ function downloadText(filename: string, text: string) {
 
 export function NoteEditorPage(props: { mode: 'create' | 'edit' }) {
   const toast = useToast()
-  const user = getCurrentUser()
+  const { state } = useAuth()
+  const userId = state.status === 'authenticated' ? state.user.id : ''
   const navigate = useNavigate()
   const { noteId } = useParams()
   const [params] = useSearchParams()
 
-  const existing = useMemo(() => (props.mode === 'edit' && noteId ? getNote(noteId) : undefined), [noteId, props.mode])
+  const noteQuery = useNote(props.mode === 'edit' ? noteId : undefined)
+  const existing = noteQuery.data ?? undefined
+  const saveNote = useSaveNote()
+  const deleteNote = useDeleteNote()
+  const createPost = useCreatePost()
+  const ensureTag = useEnsureTag()
+
 
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -218,6 +221,10 @@ export function NoteEditorPage(props: { mode: 'create' | 'edit' }) {
     },
   }
 
+  if (props.mode === 'edit' && noteQuery.isLoading) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载笔记中…</div></div>
+  }
+
   return (
     <div className="page">
       <section className="section">
@@ -239,9 +246,13 @@ export function NoteEditorPage(props: { mode: 'create' | 'edit' }) {
             <button
               className="btn danger"
               onClick={() => {
-                deleteNote(existing.id)
-                toast.push('已删除笔记', 'success')
-                navigate('/notes')
+                deleteNote.mutate(existing.id, {
+                  onSuccess: () => {
+                    toast.push('已删除笔记', 'success')
+                    navigate('/notes')
+                  },
+                  onError: (error) => toast.push(error instanceof Error ? error.message : '删除失败', 'error'),
+                })
               }}
             >
               删除
@@ -369,9 +380,9 @@ export function NoteEditorPage(props: { mode: 'create' | 'edit' }) {
             <button
               className="btn"
               onClick={async () => {
-                const note = await addOrUpdateNote({
+                const note = await saveNote.mutateAsync({
                   id: existing?.id,
-                  authorId: user.id,
+                  authorId: userId,
                   title: title.trim() || '未命名笔记',
                   contentText: content.trim(),
                   tags: parseTags(),
@@ -397,11 +408,11 @@ export function NoteEditorPage(props: { mode: 'create' | 'edit' }) {
                   return
                 }
                 const tags = parseTags()
-                tags.forEach((t) => upsertTagByName(t))
+                await Promise.all(tags.map((tag) => ensureTag.mutateAsync(tag)))
                 const card = await generateCard()
-                const note = await addOrUpdateNote({
+                const note = await saveNote.mutateAsync({
                   id: existing?.id,
-                  authorId: user.id,
+                  authorId: userId,
                   title: title.trim() || '未命名笔记',
                   contentText: content.trim(),
                   tags,
@@ -411,8 +422,8 @@ export function NoteEditorPage(props: { mode: 'create' | 'edit' }) {
                   shareCardDataUrl: card,
                 })
                 if (shareToForum) {
-                  addPost({
-                    authorId: user.id,
+                  await createPost.mutateAsync({
+                    authorId: userId,
                     title: `笔记分享：${note.title}`,
                     contentText: note.contentText.slice(0, 180),
                     imageUrls: card ? [card] : [],

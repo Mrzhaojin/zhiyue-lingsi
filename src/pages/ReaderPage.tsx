@@ -1,8 +1,13 @@
 import { Sparkles, Edit3 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { addAIAnalysisRecord, addOrUpdateNote, addVocabItem, getBook, getCurrentUser, getReadingHistory, saveReadingHistory, updateCurrentUser } from '../data/db'
 import type { AITextAnalysis, Book, NoteTemplate } from '../domain/models'
+import { useAuth } from '../modules/auth/client'
+import { useBook } from '../features/library/queries'
+import { useAddVocab, useIncrementReadingMinutes, useProgress, useSaveProgress } from '../features/reading/queries'
+import { useCurrentProfile, useUpdateProfile } from '../features/settings/queries'
+import { useSaveAnalysis } from '../features/assistant/queries'
+import { useSaveNote } from '../features/notes/queries'
 import { BookCover } from '../components/BookCover'
 import { aiAnalyzeText, aiTranslate, aiWordExplain, speakText, stopSpeak } from '../services/ai'
 import { useToast } from '../ui/useToast'
@@ -36,8 +41,28 @@ export function ReaderPage() {
   const { bookId } = useParams()
   const toast = useToast()
   const navigate = useNavigate()
-  const book = bookId ? getBook(bookId) : undefined
-  const user = getCurrentUser()
+  const { state } = useAuth()
+  const userId = state.status === 'authenticated' ? state.user.id : ''
+
+  const bookQuery = useBook(bookId)
+  const book = bookQuery.data ?? undefined
+  const profileQuery = useCurrentProfile()
+  const profile = profileQuery.data
+  const progressQuery = useProgress(userId, bookId ?? '')
+  const saveProgress = useSaveProgress()
+  const incrementReadingMinutes = useIncrementReadingMinutes()
+  const updateProfile = useUpdateProfile()
+  const addVocab = useAddVocab()
+  const saveAnalysis = useSaveAnalysis()
+  const saveNote = useSaveNote()
+
+  const saveProgressRef = useRef(saveProgress.mutate)
+  saveProgressRef.current = saveProgress.mutate
+  const incrementRef = useRef(incrementReadingMinutes.mutate)
+  incrementRef.current = incrementReadingMinutes.mutate
+  const userIdRef = useRef(userId)
+  userIdRef.current = userId
+  const initializedBook = useRef<string | null>(null)
 
   const [chapterId, setChapterId] = useState<string | undefined>(undefined)
   const chapter = useMemo(() => (book ? pickChapter(book, chapterId) : undefined), [book, chapterId])
@@ -57,7 +82,7 @@ export function ReaderPage() {
   const isSanTi = book?.title === '三体'
   const isGatsby = book?.title === 'The Great Gatsby'
   const showMutualTranslate = isHongLouMeng || isSanTi || isGatsby
-  
+
   const translateTo: 'zh' | 'en' | 'ja' | 'ko' | 'modern' | 'classic' = 'zh'
   const [translation, setTranslation] = useState<string>('')
   const [activeTranslateType, setActiveTranslateType] = useState<string | null>(null)
@@ -70,7 +95,7 @@ export function ReaderPage() {
   const [menu, setMenu] = useState<SelectionMenuState>({ open: false })
   const [isReading, setIsReading] = useState(false)
   const [stylePanelOpen, setStylePanelOpen] = useState(false)
-  
+
   const contentRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -78,45 +103,41 @@ export function ReaderPage() {
   }, [])
 
   useEffect(() => {
-    const history = bookId ? getReadingHistory(user.id, bookId) : undefined
-    if (history) {
-      setChapterId(history.chapterId)
-    } else {
-      setChapterId(undefined)
-    }
+    if (!bookId || !progressQuery.isSuccess) return
+    if (initializedBook.current === bookId) return
+    initializedBook.current = bookId
+    setChapterId(progressQuery.data?.chapterId)
     setAnalysis(null)
     setAnalysisOpen(false)
     setTranslation('')
     setWordExplain(null)
-  }, [bookId, user.id])
+  }, [bookId, progressQuery.isSuccess, progressQuery.data?.chapterId])
 
   useEffect(() => {
-    if (bookId && chapter) {
-      saveReadingHistory(user.id, bookId, chapter.id, 0)
-    }
-  }, [bookId, chapter, user.id])
+    if (!bookId || !chapter || !userId) return
+    saveProgressRef.current({ userId, bookId, chapterId: chapter.id, progress: 0 })
+  }, [bookId, chapter?.id, userId])
 
   useEffect(() => {
     if (book?.language === 'en') return
     setLearningMode(false)
   }, [book?.language])
 
-  // 记录阅读时长逻辑
   useEffect(() => {
     const timer = setInterval(() => {
-      updateCurrentUser({
-        stats: {
-          ...user.stats,
-          readingMinutes: (user.stats?.readingMinutes || 0) + 1,
-        },
-      })
+      if (!userIdRef.current) return
+      incrementRef.current({ userId: userIdRef.current, minutes: 1 })
     }, 60000)
     return () => clearInterval(timer)
-  }, [user])
+  }, [])
 
-  if (!book || !chapter) return <div className="page">书籍未找到</div>
+  if (bookQuery.isLoading || profileQuery.isLoading) {
+    return <div className="page"><div className="empty" style={{ padding: '60px 0' }}>加载书籍中…</div></div>
+  }
 
-  const reading = user.settings.reading
+  if (!book || !chapter || !profile) return <div className="page">书籍未找到</div>
+
+  const reading = profile.settings.reading
   const readingFontFamily = reading.fontFamily ?? 'sans'
 
   async function openAnalysis() {
@@ -128,7 +149,7 @@ export function ReaderPage() {
     try {
       const res = await aiAnalyzeText(content)
       setAnalysis(res)
-      addAIAnalysisRecord({ userId: user.id, bookId: book.id, chapterId: chapter.id, analysis: res })
+      saveAnalysis.mutate({ userId, bookId: book.id, chapterId: chapter.id, analysis: res })
     } catch (error) {
       toast.push(error instanceof Error && error.message ? error.message : 'AI 赏析失败，请稍后重试', 'error')
     } finally {
@@ -146,7 +167,7 @@ export function ReaderPage() {
     try {
       const res = await aiAnalyzeText(t)
       setSnippet(res)
-      addAIAnalysisRecord({ userId: user.id, bookId: book.id, chapterId: chapter.id, analysis: res })
+      saveAnalysis.mutate({ userId, bookId: book.id, chapterId: chapter.id, analysis: res })
     } catch (error) {
       toast.push(error instanceof Error && error.message ? error.message : 'AI 句子赏析失败，请稍后重试', 'error')
     } finally {
@@ -178,10 +199,11 @@ export function ReaderPage() {
   }
 
   function updateReadingStyle(next: Partial<typeof reading>) {
-    updateCurrentUser({
+    if (!profile) return
+    updateProfile.mutate({
       settings: {
-        ...user.settings,
-        reading: { ...user.settings.reading, ...next },
+        ...profile.settings,
+        reading: { ...profile.settings.reading, ...next },
       },
     })
   }
@@ -527,7 +549,7 @@ export function ReaderPage() {
                    void doExplain(w.replace(/[^\w'-]/g, ''))
                 }} style={{ padding: '6px 14px', fontSize: '11px', border: 'none', background: 'transparent' }}>查词</button>
                 <button className="btn" onClick={() => {
-                  addVocabItem({ userId: user.id, type: 'word', text: menu.text })
+                  addVocab.mutate({ userId, type: 'word', text: menu.text })
                   toast.push('已加入单词本', 'success')
                   setMenu({ open: false })
                 }} style={{ padding: '6px 14px', fontSize: '11px', border: 'none', background: 'transparent' }}>存单词</button>
@@ -665,8 +687,8 @@ export function ReaderPage() {
                     className="btn primary"
                     onClick={async () => {
                       const combined = `【原文】\n${snippet.text}\n\n【文本解析】\n${snippet.textInterpretation}\n\n【写作亮点】\n${snippet.writingHighlights}\n\n【内容深意】\n${snippet.deepMeaning}\n\n【背景补充】\n${snippet.backgroundInfo}`
-                      const note = await addOrUpdateNote({
-                        authorId: user.id,
+                      const note = await saveNote.mutateAsync({
+                        authorId: userId,
                         title: '句子赏析分享',
                         contentText: combined,
                         tags: ['#AI赏析'],
