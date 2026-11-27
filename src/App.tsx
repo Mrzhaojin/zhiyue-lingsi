@@ -36,6 +36,7 @@ import {
   ForgotPasswordPage,
   LoginPage,
   RegisterPage,
+  ResetPasswordPage,
   RequireAuth,
   RequirePermission,
 } from './modules/auth/client'
@@ -44,7 +45,7 @@ import { useEffect, useState, useCallback } from 'react'
 
 function App() {
   useApplyTheme()
-  const [isMobile, setIsMobile] = useState(false)
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
 
   // 检测屏幕尺寸
   const checkScreenSize = useCallback(() => {
@@ -53,7 +54,6 @@ function App() {
 
   useEffect(() => {
     ensureDbInitialized()
-    checkScreenSize()
     window.addEventListener('resize', checkScreenSize)
     return () => window.removeEventListener('resize', checkScreenSize)
   }, [checkScreenSize])
@@ -62,13 +62,15 @@ function App() {
   const ShellComponent = isMobile ? MobileShell : WebShell
 
   return (
-    <AuthProvider config={{ persistAccessToken: true }}>
+    <AuthProvider>
       <ToastProvider>
         <Routes>
           <Route path="/zhiyueling-si/login" element={<LoginPage />} />
           <Route path="/zhiyueling-si/register" element={<RegisterPage />} />
           <Route path="/zhiyueling-si/forgot" element={<ForgotPasswordPage />} />
           <Route path="/zhiyueling-si/password/change" element={<ChangePasswordPage />} />
+          <Route path="/zhiyueling-si/password/reset" element={<ResetPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/auth/login" element={<Navigate to="/zhiyueling-si/login" replace />} />
           <Route path="/auth/register" element={<Navigate to="/zhiyueling-si/register" replace />} />
           <Route path="/auth/forgot" element={<Navigate to="/zhiyueling-si/forgot" replace />} />

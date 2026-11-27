@@ -1,6 +1,5 @@
 import { nanoid } from 'nanoid'
-import { readStorage, writeStorage } from '../lib/storage'
-import { dbService } from './dbService'
+import { getLocalStorageBytes, readStorage, safeJsonParse, writeStorage } from '../lib/storage'
 import type {
   AIAnalysisRecord,
   AIChatMessage,
@@ -19,21 +18,9 @@ import type {
   VocabItem,
 } from './models'
 
-// 检查Supabase连接状态
-let supabaseConnected = false
-
-async function checkSupabaseConnection() {
-  try {
-    supabaseConnected = await dbService.healthCheck()
-    console.log('Supabase connection status:', supabaseConnected ? 'Connected' : 'Not connected')
-  } catch (error) {
-    console.error('Error checking Supabase connection:', error)
-    supabaseConnected = false
-  }
-}
-
-// 初始化时检查连接
-checkSupabaseConnection()
+// 说明：这里曾经有一个「启动时探测 Supabase」的逻辑。它的 healthCheck 在 mock 客户端下
+// 恒为 true，而唯一的 createNote 同步又必然失败，属于装饰性代码，已随 dbService 一并移除。
+// 业务数据的持久化将在 M1 迁移到 IndexedDB Repository。
 
 
 type Database = {
@@ -1264,6 +1251,34 @@ export function getDbSnapshot(): Database {
   return readDb()
 }
 
+/** 导出整库为可读 JSON，供用户备份 / 迁移。 */
+export function exportDatabaseJson(): string {
+  return JSON.stringify(readDb(), null, 2)
+}
+
+/** 导入之前导出的 JSON；校验失败时抛错且不写入。 */
+export function importDatabaseJson(json: string): { users: number; posts: number; notes: number } {
+  const parsed = safeJsonParse<Partial<Database>>(json)
+  if (!parsed || typeof parsed !== 'object') throw new Error('数据文件不是合法的 JSON 对象')
+  if (!parsed.users || typeof parsed.users !== 'object') throw new Error('数据文件缺少 users 字段')
+  if (typeof parsed.currentUserId !== 'string') throw new Error('数据文件缺少 currentUserId 字段')
+
+  const next = migrateToV4(parsed)
+  if (!next.users[next.currentUserId]) throw new Error('数据文件的 currentUserId 不在 users 中')
+  next.version = 4
+  writeDb(next)
+  return {
+    users: Object.keys(next.users).length,
+    posts: Object.keys(next.posts).length,
+    notes: Object.keys(next.notes).length,
+  }
+}
+
+/** 当前本地数据库占用的字节数（UTF-8）。 */
+export function getDatabaseSizeBytes(): number {
+  return getLocalStorageBytes(STORAGE_KEY)
+}
+
 export function getCurrentUser(): User {
   if (typeof window === 'undefined') {
     return {
@@ -1300,12 +1315,80 @@ export function getCurrentUser(): User {
   }
   const db = readDb()
   const user = db.users[db.currentUserId]
-  if (!user) {
-    const seeded = createSeedDb()
-    writeDb(seeded)
-    return seeded.users[seeded.currentUserId]!
+  if (user) return user
+
+  // 以前这里会用 createSeedDb() 覆盖整库来“修复”缺失的当前用户——这是一条会丢数据的路径。
+  // 现在只返回一个不落库的访客对象，真实用户由 AuthProvider 登录后通过 ensureUserRecord 绑定。
+  return createTransientGuest()
+}
+
+function defaultSettings(): User['settings'] {
+  return {
+    theme: 'system',
+    reading: {
+      fontSize: 18,
+      lineHeight: 1.7,
+      textColor: '#111827',
+      backgroundColor: '#ffffff',
+      fontFamily: 'sans',
+    },
+    notifications: { like: true, comment: true, collect: true },
   }
+}
+
+function createTransientGuest(): User {
+  return {
+    id: '',
+    role: 'user',
+    nickname: '访客',
+    avatarUrl: undefined,
+    bio: '',
+    profileTag: '',
+    createdAt: now(),
+    stats: { readingMinutes: 0, postsCount: 0, notesCount: 0, followersCount: 0, followingCount: 0 },
+    settings: defaultSettings(),
+  }
+}
+
+/**
+ * 把「登录身份」落成一条本地用户记录，并设为当前用户。
+ * 这是修复「认证用户」与「数据用户」两套 id 不一致的入口：
+ * 之后所有内容归属、统计、阅读记录都只认这一个 id。
+ */
+export function ensureUserRecord(input: { id: string; nickname: string; role?: 'user' | 'admin' }): User {
+  const db = readDb()
+  const existing = db.users[input.id]
+  const nickname = input.nickname.trim() || existing?.nickname || '读者'
+
+  if (existing) {
+    const role = input.role ?? existing.role
+    const needsUpdate = existing.nickname !== nickname || existing.role !== role || db.currentUserId !== input.id
+    if (!needsUpdate) return existing
+    const next: User = { ...existing, nickname, role }
+    db.users[input.id] = next
+    db.currentUserId = input.id
+    writeDb(db)
+    return next
+  }
+
+  const user: User = {
+    ...createTransientGuest(),
+    id: input.id,
+    nickname,
+    role: input.role ?? 'user',
+    createdAt: now(),
+  }
+  db.users[user.id] = user
+  db.currentUserId = user.id
+  writeDb(db)
   return user
+}
+
+export function setCurrentUserId(userId: string) {
+  const db = readDb()
+  if (db.currentUserId === userId) return
+  db.currentUserId = userId
+  writeDb(db)
 }
 
 export function updateCurrentUser(partial: Partial<User>) {
@@ -1507,16 +1590,7 @@ export async function addOrUpdateNote(note: Partial<Note> & Pick<Note, 'authorId
     if (user) user.stats.notesCount += 1
   }
   writeDb(db)
-  
-  // 如果Supabase连接正常，同步到后端
-  if (supabaseConnected) {
-    try {
-      await dbService.createNote(merged)
-    } catch (error) {
-      console.error('Error syncing note to Supabase:', error)
-    }
-  }
-  
+
   return merged
 }
 

@@ -129,8 +129,8 @@ export function ReaderPage() {
       const res = await aiAnalyzeText(content)
       setAnalysis(res)
       addAIAnalysisRecord({ userId: user.id, bookId: book.id, chapterId: chapter.id, analysis: res })
-    } catch {
-      toast.push('AI赏析失败，请稍后重试', 'error')
+    } catch (error) {
+      toast.push(error instanceof Error && error.message ? error.message : 'AI 赏析失败，请稍后重试', 'error')
     } finally {
       setAnalysisLoading(false)
     }
@@ -147,8 +147,8 @@ export function ReaderPage() {
       const res = await aiAnalyzeText(t)
       setSnippet(res)
       addAIAnalysisRecord({ userId: user.id, bookId: book.id, chapterId: chapter.id, analysis: res })
-    } catch {
-      toast.push('AI句子赏析失败，请稍后重试', 'error')
+    } catch (error) {
+      toast.push(error instanceof Error && error.message ? error.message : 'AI 句子赏析失败，请稍后重试', 'error')
     } finally {
       setSnippetLoading(false)
     }
@@ -172,8 +172,8 @@ export function ReaderPage() {
     try {
       const res = await aiWordExplain(word)
       setWordExplain(res)
-    } catch {
-      toast.push('单词解析失败', 'error')
+    } catch (error) {
+      toast.push(error instanceof Error && error.message ? error.message : '单词解析失败', 'error')
     }
   }
 

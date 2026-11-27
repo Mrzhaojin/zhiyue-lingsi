@@ -1,79 +1,27 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { isSupabaseConfigured, supabaseAnonKey, supabaseUrl } from './runtimeConfig'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-
-// 仅在开发环境中使用模拟客户端，生产环境必须提供真实配置
-let supabase: SupabaseClient
-
-if (supabaseUrl && supabaseAnonKey) {
-  // 使用真实的 Supabase 配置
-  supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      storage: window.localStorage,
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: true
-    }
-  })
-  console.log('Using real Supabase configuration')
-} else {
-  // 使用模拟客户端，避免连接到不存在的服务器
-  console.warn('Using mock Supabase client. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in production.')
-  supabase = {
-    auth: {
-      getUser: async () => ({ data: { user: null }, error: null }),
-      signInWithPassword: async () => ({ data: { user: null, session: null }, error: null }),
-      signUp: async () => ({ data: { user: null, session: null }, error: null }),
-      signOut: async () => ({ error: null }),
-      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-      getSession: async () => ({ data: { session: null }, error: null }),
-      updateUser: async () => ({ data: { user: null }, error: null }),
-      resetPasswordForEmail: async () => ({ error: null })
-    },
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          limit: () => ({
-            single: async () => ({ data: null, error: null })
-          })
-        }),
-        limit: () => ({
-          single: async () => ({ data: null, error: null })
-        })
-      }),
-      insert: () => ({
-        select: async () => ({ data: [], error: null })
-      }),
-      update: () => ({
-        select: async () => ({ data: [], error: null })
-      }),
-      delete: () => ({
-        select: async () => ({ data: [], error: null })
-      })
+/**
+ * 只有配置了 Supabase 才创建客户端。
+ * 以前这里有一个 mock 客户端：登录会「成功」但永远不会建立会话，
+ * 导致整个应用卡在加载中。mock 已删除——没有配置就走本地演示模式。
+ */
+export const supabase: SupabaseClient | null = isSupabaseConfigured
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        flowType: 'pkce',
+      },
     })
-  } as unknown as SupabaseClient
-}
+  : null
 
-export { supabase }
-
-// 添加健康检查函数
-export async function checkSupabaseConnection() {
-  try {
-    if (supabaseUrl && supabaseAnonKey) {
-      const { error } = await supabase.auth.getUser()
-      if (error) {
-        console.warn('Supabase connection check failed:', error.message)
-        return false
-      }
-      console.log('Supabase connection established successfully')
-      return true
-    } else {
-      console.log('Using mock Supabase client, skipping connection check')
-      return true
-    }
-  } catch (error) {
-    console.warn('Error checking Supabase connection:', error)
-    return false
+export function requireSupabase(): SupabaseClient {
+  if (!supabase) {
+    throw new Error(
+      'Supabase 未配置：请设置 VITE_SUPABASE_URL 与 VITE_SUPABASE_ANON_KEY，或使用本地演示模式。',
+    )
   }
+  return supabase
 }

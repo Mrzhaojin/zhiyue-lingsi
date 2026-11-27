@@ -1,290 +1,139 @@
 import type { AITextAnalysis, Book, ReadingDifficulty } from '../data/models'
 import { listBooks } from '../data/db'
+import { aiProxyUrl } from '../lib/runtimeConfig'
 
-// 真实的方舟API调用
-async function callDoubaoAPI(prompt: string, systemPrompt?: string, retries = 3): Promise<string> {
-  // 使用用户提供的API密钥
-  const apiKey = "***REMOVED-API-KEY***"
-  if (!apiKey) {
-    // 如果没有 API 密钥，使用模拟响应
-    console.log('No API key provided, using mock response')
-    return generateMockResponse(prompt)
+// AI 传输层：浏览器只调用同源代理，模型密钥永远不下发到前端。
+// 代理未配置时明确抛错 —— 宁可失败，也不返回「演示释义」这类假数据。
+
+const AI_TIMEOUT_MS = 30_000
+
+export class AIUnavailableError extends Error {
+  constructor(message = 'AI 服务未配置：请设置 VITE_AI_PROXY_URL 并启动 AI 代理。') {
+    super(message)
+    this.name = 'AIUnavailableError'
   }
-
-  console.log('Calling Doubao API with model: ep-20260413211111-lrxfq')
-  console.log('API Key present:', !!apiKey)
-
-  for (let i = 0; i < retries; i++) {
-    try {
-      console.log(`Attempt ${i + 1}/${retries} to call Doubao API`)
-      console.log('API Key:', apiKey.substring(0, 5) + '...' + apiKey.substring(apiKey.length - 5))
-      console.log('Prompt:', prompt.substring(0, 50) + '...')
-      
-      // 使用正确的方舟 API 端点
-      // 准备请求数据
-      let requestPrompt = prompt
-      if (systemPrompt) {
-        requestPrompt = `${systemPrompt}\n\n${prompt}`
-      }
-
-      const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/responses', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: 'ep-20260413211111-lrxfq',
-          input: requestPrompt
-        })
-      })
-
-      console.log('Doubao API response status:', response.status)
-      console.log('Doubao API response status text:', response.statusText)
-
-      // 读取完整的响应内容
-      const responseText = await response.text()
-      console.log('Doubao API response text:', responseText)
-
-      if (!response.ok) {
-        try {
-          const errorData = JSON.parse(responseText)
-          const errorMessage = errorData.message || response.statusText
-          console.error('Doubao API error response:', errorData)
-          throw new Error(`Doubao API error: ${errorMessage}`)
-        } catch (parseError) {
-          console.error('Failed to parse error response:', parseError)
-          throw new Error(`Doubao API error: ${response.status} ${response.statusText}`)
-        }
-      }
-
-      const data = JSON.parse(responseText)
-      console.log('Doubao API response:', data)
-      
-      // 解析方舟API的响应格式
-      let responseContent = ''
-      if (data.output && data.output.length > 0) {
-        // 找到类型为message的输出
-        const messageOutput = data.output.find((item: unknown) => typeof item === 'object' && item !== null && 'type' in item && item.type === 'message')
-        if (messageOutput && typeof messageOutput === 'object' && messageOutput !== null && 'content' in messageOutput && Array.isArray(messageOutput.content) && messageOutput.content.length > 0) {
-          // 找到类型为output_text的内容
-          const textContent = messageOutput.content.find((contentItem: unknown) => typeof contentItem === 'object' && contentItem !== null && 'type' in contentItem && contentItem.type === 'output_text')
-          if (textContent && typeof textContent === 'object' && textContent !== null && 'text' in textContent && typeof textContent.text === 'string') {
-            responseContent = textContent.text
-          }
-        }
-      }
-      
-      if (!responseContent) {
-        throw new Error('Invalid Doubao API response format')
-      }
-      
-      return responseContent
-    } catch (error) {
-      console.warn(`Doubao API call failed (attempt ${i + 1}/${retries}):`, error)
-      if (i < retries - 1) {
-        // 指数退避重试
-        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)))
-      }
-    }
-  }
-
-  // 如果 API 调用失败，抛出错误而不是使用模拟响应
-  throw new Error('API call failed after multiple attempts')
 }
 
-// 调用豆包API
-export async function streamDoubaoAPI(messages: Array<{role: string, content: string}>, systemPrompt?: string): Promise<ReadableStream<string>> {
-  // 使用用户提供的API密钥
-  const apiKey = "***REMOVED-API-KEY***"
-  if (!apiKey) {
-    throw new Error('No API key provided')
-  }
+function aiBase(): string {
+  if (!aiProxyUrl) throw new AIUnavailableError()
+  return aiProxyUrl
+}
 
-  console.log('Calling Doubao API with model: ep-20260413211111-lrxfq')
-  console.log('API Key present:', !!apiKey)
-  console.log('API Key length:', apiKey ? apiKey.length : 0)
-  console.log('API endpoint:', 'https://ark.cn-beijing.volces.com/api/v3/responses')
-
-  // 准备请求数据
-  let prompt = messages.map(msg => `${msg.role}: ${msg.content}`).join('\n')
-  if (systemPrompt) {
-    prompt = `${systemPrompt}\n\n${prompt}`
-  }
-
-  const requestData = {
-    model: 'ep-20260413211111-lrxfq',
-    input: prompt
-  }
-
-  console.log('Request data:', JSON.stringify(requestData, null, 2))
-
-  // 调用API
-  const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/responses', {
+async function postJson<T>(path: string, body: unknown, timeoutMs = AI_TIMEOUT_MS): Promise<T> {
+  const response = await fetch(`${aiBase()}${path}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify(requestData)
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs),
   })
-
-  console.log('Response status:', response.status)
-  console.log('Response status text:', response.statusText)
-
-  // 读取完整的响应内容
-  const responseText = await response.text()
-  console.log('Doubao API response text:', responseText)
-
   if (!response.ok) {
-    try {
-      const errorData = JSON.parse(responseText)
-      const errorMessage = errorData.message || response.statusText
-      console.error('Doubao API error response:', errorData)
-      throw new Error(`Doubao API error: ${errorMessage}`)
-    } catch (parseError) {
-      console.error('Failed to parse error response:', parseError)
-      throw new Error(`Doubao API error: ${response.status} ${response.statusText}`)
-    }
+    const detail = await response.text().catch(() => '')
+    throw new Error(`AI 服务返回 ${response.status}${detail ? `：${detail.slice(0, 200)}` : ''}`)
   }
-
-  const data = JSON.parse(responseText)
-  console.log('Doubao API response:', data)
-  
-  // 解析方舟API的响应格式
-  let responseContent = ''
-  if (data.output && data.output.length > 0) {
-    // 找到类型为message的输出
-    const messageOutput = data.output.find((item: unknown) => typeof item === 'object' && item !== null && 'type' in item && item.type === 'message')
-    if (messageOutput && typeof messageOutput === 'object' && messageOutput !== null && 'content' in messageOutput && Array.isArray(messageOutput.content) && messageOutput.content.length > 0) {
-      // 找到类型为output_text的内容
-      const textContent = messageOutput.content.find((contentItem: unknown) => typeof contentItem === 'object' && contentItem !== null && 'type' in contentItem && contentItem.type === 'output_text')
-      if (textContent && typeof textContent === 'object' && textContent !== null && 'text' in textContent && typeof textContent.text === 'string') {
-        responseContent = textContent.text
-      }
-    }
-  }
-  
-  if (!responseContent) {
-    throw new Error('Invalid Doubao API response format')
-  }
-  
-  console.log('Response content:', responseContent)
-
-  // 返回流式响应
-  console.log('Creating readable stream with content length:', responseContent.length)
-  return new ReadableStream({
-    start(controller) {
-      console.log('Stream started')
-      let index = 0
-      const interval = setInterval(() => {
-        if (index < responseContent.length) {
-          const char = responseContent[index]
-          console.log('Enqueuing char:', char)
-          controller.enqueue(char)
-          index++
-        } else {
-          console.log('Stream completed')
-          clearInterval(interval)
-          controller.close()
-        }
-      }, 50)
-    }
-  })
+  return (await response.json()) as T
 }
 
-// 生成模拟响应，确保用户体验
-function generateMockResponse(prompt: string): string {
-  // 检查是否是文本分析请求
-  if (prompt.includes('请对以下文本进行深度分析')) {
-    return `文本解读：这是一段富有深意的文本，通过细腻的描写展现了作者的情感和思想。
+async function callDoubaoAPI(prompt: string, systemPrompt?: string): Promise<string> {
+  const data = await postJson<{ text?: string; output_text?: string }>('/responses', {
+    input: prompt,
+    system: systemPrompt,
+  })
+  const text = data.text ?? data.output_text
+  if (!text) throw new Error('AI 服务返回了空结果')
+  return text
+}
 
-写作亮点：作者运用了丰富的修辞手法，如比喻、拟人等，使文本更加生动形象。
+/**
+ * 聊天流：优先消费服务端 SSE（data: {"delta": "..."}），
+ * 服务端返回普通 JSON 时退化为一次性输出。浏览器端不做逐字假回放。
+ */
+export async function streamDoubaoAPI(
+  messages: Array<{ role: string; content: string }>,
+  systemPrompt?: string,
+  signal?: AbortSignal,
+): Promise<ReadableStream<string>> {
+  const response = await fetch(`${aiBase()}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, system: systemPrompt }),
+    signal: signal ?? AbortSignal.timeout(120_000),
+  })
+  if (!response.ok) throw new Error(`AI 服务返回 ${response.status}`)
 
-深层含义：文本背后蕴含着对生命、爱情、友情等主题的深刻思考。
-
-背景信息：这段文本可能来自一部经典文学作品，反映了特定时代的社会背景和文化氛围。`
+  const contentType = response.headers.get('content-type') ?? ''
+  if (!contentType.includes('text/event-stream') || !response.body) {
+    const text = await response.text()
+    return new ReadableStream<string>({
+      start(controller) {
+        controller.enqueue(text)
+        controller.close()
+      },
+    })
   }
-  
-  // 检查是否是书籍推荐请求
-  if (prompt.includes('推荐') || prompt.includes('找书') || prompt.includes('书单')) {
-    return `我可以为你推荐一些书籍。你可以告诉我你喜欢的类型、作者或者关键词，我会为你找到合适的书籍。
 
-例如：
-- 推荐一些经典文学作品
-- 有没有关于人工智能的书籍
-- 找一些适合青少年的科幻小说`
-  }
-  
-  // 检查是否是学习相关请求
-  if (prompt.includes('学习') || prompt.includes('计划') || prompt.includes('复盘')) {
-    return `我可以帮助你制定学习计划和进行学习复盘。你可以告诉我你的学习目标，我会为你提供建议。
-
-例如：
-- 制定一个月的阅读计划
-- 如何提高阅读效率
-- 如何进行每周学习复盘`
-  }
-  
-  // 其他类型的请求
-  return `我是你的专属阅读 AI 助手，很高兴为你服务。你可以问我关于书籍、阅读、文学等方面的问题，我会尽力为你提供详细、准确的信息。
-
-例如：
-- 推荐一些经典文学作品
-- 如何提高阅读效率
-- 解释某个文学概念`
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  return new ReadableStream<string>({
+    async pull(controller) {
+      const { done, value } = await reader.read()
+      if (done) {
+        controller.close()
+        return
+      }
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed.startsWith('data:')) continue
+        const payload = trimmed.slice(5).trim()
+        if (!payload || payload === '[DONE]') continue
+        try {
+          const parsed = JSON.parse(payload) as { delta?: string; text?: string }
+          const chunk = parsed.delta ?? parsed.text
+          if (chunk) controller.enqueue(chunk)
+        } catch {
+          controller.enqueue(payload)
+        }
+      }
+    },
+    cancel(reason) {
+      void reader.cancel(reason)
+    },
+  })
 }
 
 async function aiAnalyzeTextWithDoubao(text: string): Promise<AITextAnalysis> {
   const prompt = `请对以下文本进行深度分析，包括文本解读、写作亮点、深层含义和背景信息：\n\n${text}`
-  
+
   const systemPrompt = `你是一个专业的文学分析助手，擅长对各种文本进行深度解读。请从以下几个方面分析给定文本：\n1. 文本解读：解释文本的字面意义和隐含意义\n2. 写作亮点：分析文本的写作技巧和艺术特色\n3. 深层含义：探讨文本背后的主题、思想和情感\n4. 背景信息：提供与文本相关的背景知识，如作者、时代背景等\n\n请使用中文回答，分析要深入、全面、专业。`
-  
-  try {
-    const response = await callDoubaoAPI(prompt, systemPrompt)
-    
-    // 解析豆包的回复，提取各个部分
-    const sections = response.split('\n\n')
-    let textInterpretation = ''
-    let writingHighlights = ''
-    let deepMeaning = ''
-    let backgroundInfo = ''
-    
-    sections.forEach(section => {
-      if (section.includes('文本解读') || section.includes('字面意义')) {
-        textInterpretation = section.replace(/^.*：/, '').trim()
-      } else if (section.includes('写作亮点') || section.includes('写作技巧')) {
-        writingHighlights = section.replace(/^.*：/, '').trim()
-      } else if (section.includes('深层含义') || section.includes('主题')) {
-        deepMeaning = section.replace(/^.*：/, '').trim()
-      } else if (section.includes('背景信息') || section.includes('作者') || section.includes('时代背景')) {
-        backgroundInfo = section.replace(/^.*：/, '').trim()
-      }
-    })
-    
-    // 如果没有明确的 sections，使用整个回复作为分析
-    if (!textInterpretation) {
-      textInterpretation = response
+
+  const response = await callDoubaoAPI(prompt, systemPrompt)
+
+  const sections = response.split('\n\n')
+  let textInterpretation = ''
+  let writingHighlights = ''
+  let deepMeaning = ''
+  let backgroundInfo = ''
+
+  sections.forEach((section) => {
+    if (section.includes('文本解读') || section.includes('字面意义')) {
+      textInterpretation = section.replace(/^.*：/, '').trim()
+    } else if (section.includes('写作亮点') || section.includes('写作技巧')) {
+      writingHighlights = section.replace(/^.*：/, '').trim()
+    } else if (section.includes('深层含义') || section.includes('主题')) {
+      deepMeaning = section.replace(/^.*：/, '').trim()
+    } else if (section.includes('背景信息') || section.includes('作者') || section.includes('时代背景')) {
+      backgroundInfo = section.replace(/^.*：/, '').trim()
     }
-    
-    return {
-      text,
-      textInterpretation,
-      writingHighlights,
-      deepMeaning,
-      backgroundInfo
-    }
-  } catch (error) {
-    console.error('Doubao API error:', error)
-    // 返回错误信息，而不是抛出错误
-    return {
-      text,
-      textInterpretation: 'AI赏析失败，请稍后重试',
-      writingHighlights: '',
-      deepMeaning: '',
-      backgroundInfo: ''
-    }
+  })
+
+  if (!textInterpretation) {
+    textInterpretation = response
   }
+
+  return { text, textInterpretation, writingHighlights, deepMeaning, backgroundInfo }
 }
 
 async function aiAssistantReplyWithDoubao(userText: string, history: Array<{role: string, content: string}>): Promise<string> {
@@ -394,20 +243,9 @@ export async function aiTranslate(text: string, to: 'zh' | 'en' | 'ja' | 'ko' | 
 }
 
 export async function aiAnalyzeText(text: string): Promise<AITextAnalysis> {
-  try {
-    // 使用豆包API进行文本分析
-    return await aiAnalyzeTextWithDoubao(text)
-  } catch (error) {
-    console.error('AI analysis error:', error)
-    // 返回错误信息，而不是抛出错误
-    return {
-      text,
-      textInterpretation: 'AI赏析失败，请稍后重试',
-      writingHighlights: '',
-      deepMeaning: '',
-      backgroundInfo: ''
-    }
-  }
+  // 失败必须抛给调用方：以前这里把「AI赏析失败」当成正常结果返回，
+  // 调用方还会把它写进赏析记录，等于把错误持久化。
+  return aiAnalyzeTextWithDoubao(text)
 }
 
 export function speakText(text: string, voiceHint?: 'en-US' | 'en-GB' | 'zh-CN', onEnd?: () => void) {
@@ -483,13 +321,13 @@ export function getSpeechRecognition(): SpeechRecognitionCtor | undefined {
 
 export async function aiWordExplain(word: string): Promise<{ phonetic?: string; pos?: string; meaning: string; example: string }> {
   const w = word.trim()
-  await new Promise((r) => setTimeout(r, 200))
   if (!w) return { meaning: '', example: '' }
+  const data = await postJson<{ phonetic?: string; pos?: string; meaning?: string; example?: string }>('/word', { word: w })
   return {
-    phonetic: '/demo/',
-    pos: 'n./v.',
-    meaning: `（演示释义）${w}`,
-    example: `Example: I used "${w}" in a sentence for practice.`,
+    phonetic: data.phonetic,
+    pos: data.pos,
+    meaning: data.meaning ?? '',
+    example: data.example ?? '',
   }
 }
 

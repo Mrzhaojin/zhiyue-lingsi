@@ -21,32 +21,28 @@ export type AuthUser = {
   updatedAt: string
 }
 
-export type AuthTokens = {
-  accessToken: string
-  accessTokenExpiresAt: number
-}
-
 export type AuthState =
   | { status: 'anonymous' }
   | { status: 'loading' }
   | {
       status: 'authenticated'
       user: AuthUser
-      tokens: AuthTokens
     }
 
+export type AuthErrorCode =
+  | 'VALIDATION_ERROR'
+  | 'UNAUTHORIZED'
+  | 'FORBIDDEN'
+  | 'LOCKED'
+  | 'BANNED'
+  | 'NOT_FOUND'
+  | 'CONFLICT'
+  | 'RATE_LIMITED'
+  | 'INTERNAL_ERROR'
+  | 'UNAVAILABLE'
+
 export type AuthApiError = {
-  code:
-    | 'VALIDATION_ERROR'
-    | 'UNAUTHORIZED'
-    | 'FORBIDDEN'
-    | 'LOCKED'
-    | 'BANNED'
-    | 'NOT_FOUND'
-    | 'CONFLICT'
-    | 'RATE_LIMITED'
-    | 'INTERNAL_ERROR'
+  code: AuthErrorCode
   message: string
   details?: unknown
 }
-

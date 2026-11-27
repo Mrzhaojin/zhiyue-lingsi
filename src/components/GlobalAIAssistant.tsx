@@ -20,12 +20,14 @@ export function GlobalAIAssistant() {
   const location = useLocation()
   const { state } = useAuth()
   const user = state.status === 'authenticated' ? state.user : null
+  // 聊天记录按用户隔离：以前所有账号共用一个 key，换账号能看到上一个人的完整对话
+  const chatStorageKey = `rf_ai_chat_messages:${user?.id ?? 'anonymous'}`
 
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   const [threadId, setThreadId] = useState<string | null>(() => sessionStorage.getItem('rf_ai_thread_id'))
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    const savedMessages = localStorage.getItem('rf_ai_chat_messages')
+    const savedMessages = localStorage.getItem(chatStorageKey)
     if (savedMessages) {
       try {
         return JSON.parse(savedMessages)
@@ -84,10 +86,14 @@ export function GlobalAIAssistant() {
     })
   }, [threadId])
 
-  // 保存聊天记录到localStorage
+  // 保存聊天记录到localStorage（按用户隔离）
   useEffect(() => {
-    localStorage.setItem('rf_ai_chat_messages', JSON.stringify(messages))
-  }, [messages])
+    try {
+      localStorage.setItem(chatStorageKey, JSON.stringify(messages))
+    } catch {
+      // 配额满时不阻断对话，由 storage 层的统一提示负责
+    }
+  }, [messages, chatStorageKey])
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -213,10 +219,11 @@ export function GlobalAIAssistant() {
       } catch (error) {
         console.error('AI回复失败:', error)
         // 更新消息为错误提示
-        setMessages((prev) => prev.map((msg) => 
-          msg.id === assistantMsgId ? { ...msg, content: 'AI回复失败，请稍后重试' } : msg
+        const message = error instanceof Error && error.message ? error.message : 'AI 回复失败，请稍后重试'
+        setMessages((prev) => prev.map((msg) =>
+          msg.id === assistantMsgId ? { ...msg, content: message } : msg
         ))
-        toast.push('AI回复失败，请稍后重试', 'error')
+        toast.push(message, 'error')
       } finally {
         setIsSubmitting(false)
       }

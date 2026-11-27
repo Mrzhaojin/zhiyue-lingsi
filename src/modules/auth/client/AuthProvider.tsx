@@ -1,40 +1,26 @@
-import React, { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AuthApiError, AuthState, AuthUser, AuthTokens } from './types'
-import { supabase } from '../../../lib/supabase'
-import { clearAccessToken, getAccessToken, setAccessToken } from './tokenStorage'
-import type { Session } from '@supabase/supabase-js'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { runtimeMode } from '../../../lib/runtimeConfig'
+import { createCloudAuthBackend } from './backends/cloudAuth'
+import { toAuthError } from './backends/errors'
+import { createLocalAuthBackend } from './backends/localAuth'
+import type { AuthBackend } from './backends/types'
+import { AuthContext, type AuthContextValue } from './context'
+import { syncIdentity } from './identity'
+import type { AuthState, AuthUser } from './types'
 
-/**
- * AuthProvider:
- * - 以 Context 的形式提供登录态、RBAC判断与 Auth 方法
- * - 初次加载时自动监听 Supabase Auth 状态
- * - 直接使用 Supabase Auth API，确保邮箱验证等功能正常
- */
-type AuthContextValue = {
-  state: AuthState
-  loginWithPassword: (input: { email: string; password: string; remember?: boolean }) => Promise<void>
-  register: (input: { email: string; password: string; username: string }) => Promise<void>
-  logout: () => Promise<void>
-  changePassword: (input: { currentPassword: string; newPassword: string }) => Promise<void>
-  forgotPassword: (input: { email: string }) => Promise<void>
-  resetPassword: (input: { token: string; newPassword: string }) => Promise<void>
-  refreshMe: () => Promise<AuthUser | null>
-  hasRole: (role: string) => boolean
-  hasPermission: (permission: string) => boolean
+function createBackend(): AuthBackend {
+  return runtimeMode === 'cloud' ? createCloudAuthBackend() : createLocalAuthBackend()
 }
 
-export const AuthContext = createContext<AuthContextValue | null>(null)
-
-export function AuthProvider(props: {
-  children: React.ReactNode
-  config?: { persistAccessToken?: boolean }
-}) {
-  const [state, setState] = useState<AuthState>(() => {
-    const t = getAccessToken()
-    return t ? { status: 'loading' } : { status: 'anonymous' }
-  })
-
+/**
+ * AuthProvider 只做三件事：选择后端、维护状态机、把登录身份同步到本地数据层。
+ * 具体认证细节（Supabase / 本地演示）在 backends/ 下，各自独立、可替换。
+ */
+export function AuthProvider(props: { children: React.ReactNode }) {
+  const backend = useMemo(createBackend, [])
+  const [state, setState] = useState<AuthState>({ status: 'loading' })
   const mounted = useRef(true)
+
   useEffect(() => {
     mounted.current = true
     return () => {
@@ -42,279 +28,108 @@ export function AuthProvider(props: {
     }
   }, [])
 
-  // 监听 Supabase Auth 状态变化
+  const applyUser = useCallback((user: AuthUser) => {
+    // 身份在进入应用前就绑定到本地数据层，避免「登录是 A、数据是 B」
+    syncIdentity(user)
+    if (mounted.current) setState({ status: 'authenticated', user })
+  }, [])
+
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: unknown, session: Session | null) => {
-      if (!mounted.current) return
-      
-      if (session?.user) {
-        // 登录成功
-        const user: AuthUser = {
-          id: session.user.id,
-          username: session.user.user_metadata?.username || session.user.email || '',
-          email: session.user.email || undefined,
-          status: 'active', // 默认状态
-          roles: ['user'], // 默认角色
-          permissions: [], // 默认权限
-          createdAt: session.user.created_at,
-          updatedAt: session.user.updated_at || session.user.created_at
-        }
-        
-        const tokens: AuthTokens = {
-          accessToken: session.access_token,
-          accessTokenExpiresAt: (session.expires_at || Math.floor(Date.now() / 1000) + 3600) * 1000
-        }
-        
-        setAccessToken(tokens, props.config?.persistAccessToken ?? false)
-        setState({ status: 'authenticated', user, tokens })
-      } else {
-        // 登出或未登录
-        clearAccessToken()
-        setState({ status: 'anonymous' })
+    return backend.init((next) => {
+      if (next.status === 'authenticated') {
+        applyUser(next.user)
+        return
       }
+      if (mounted.current) setState(next)
     })
-
-    // 初始化时获取当前用户状态
-    const initAuth = async () => {
-      try {
-        // 添加超时处理，防止 Supabase 调用卡住
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('Authentication timeout')), 10000)
-        })
-        
-        const { data: { user }, error } = await Promise.race([
-          supabase.auth.getUser(),
-          timeoutPromise
-        ])
-        
-        if (!mounted.current) return
-        
-        if (error || !user) {
-          clearAccessToken()
-          setState({ status: 'anonymous' })
-        } else {
-          const { data: { session } } = await supabase.auth.getSession()
-          if (!mounted.current) return
-          
-          if (session) {
-            const authUser: AuthUser = {
-              id: user.id,
-              username: user.user_metadata?.username || user.email || '',
-              email: user.email || undefined,
-              status: 'active', // 默认状态
-              roles: ['user'], // 默认角色
-              permissions: [], // 默认权限
-              createdAt: user.created_at,
-              updatedAt: user.updated_at || user.created_at
-            }
-            
-            const tokens: AuthTokens = {
-              accessToken: session.access_token,
-              accessTokenExpiresAt: (session.expires_at || Math.floor(Date.now() / 1000) + 3600) * 1000
-            }
-            
-            setAccessToken(tokens, props.config?.persistAccessToken ?? false)
-            setState({ status: 'authenticated', user: authUser, tokens })
-          } else {
-            clearAccessToken()
-            setState({ status: 'anonymous' })
-          }
-        }
-      } catch (error) {
-        console.error('Authentication initialization error:', error)
-        if (!mounted.current) return
-        clearAccessToken()
-        setState({ status: 'anonymous' })
-      }
-    }
-
-    initAuth()
-    
-    return () => subscription.unsubscribe()
-  }, [props.config?.persistAccessToken])
-
-  const refreshMe = useCallback(async () => {
-    try {
-      // 添加超时处理，防止 Supabase 调用卡住
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Authentication timeout')), 10000)
-      })
-      
-      const { data: { user }, error } = await Promise.race([
-        supabase.auth.getUser(),
-        timeoutPromise
-      ])
-      
-      if (!mounted.current) return null
-      
-      if (error || !user) {
-        clearAccessToken()
-        setState({ status: 'anonymous' })
-        return null
-      }
-      
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!mounted.current) return null
-      
-      if (!session) {
-        clearAccessToken()
-        setState({ status: 'anonymous' })
-        return null
-      }
-      
-      const authUser: AuthUser = {
-        id: user.id,
-        username: user.user_metadata?.username || user.email || '',
-        email: user.email || undefined,
-        status: 'active', // 默认状态
-        roles: ['user'], // 默认角色
-        permissions: [], // 默认权限
-        createdAt: user.created_at,
-        updatedAt: user.updated_at || user.created_at
-      }
-      
-      const tokens: AuthTokens = {
-        accessToken: session.access_token,
-        accessTokenExpiresAt: (session.expires_at || Math.floor(Date.now() / 1000) + 3600) * 1000
-      }
-      
-      setAccessToken(tokens, props.config?.persistAccessToken ?? false)
-      setState({ status: 'authenticated', user: authUser, tokens })
-      return authUser
-    } catch (error) {
-      console.error('Refresh me error:', error)
-      if (!mounted.current) return null
-      clearAccessToken()
-      setState({ status: 'anonymous' })
-      return null
-    }
-  }, [props.config?.persistAccessToken])
+  }, [backend, applyUser])
 
   const loginWithPassword = useCallback(
     async (input: { email: string; password: string; remember?: boolean }) => {
       setState({ status: 'loading' })
       try {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: input.email,
-          password: input.password
-        })
-        
-        if (error) {
-          throw {
-            code: error.code,
-            message: error.message
-          } as AuthApiError
-        }
-        
-        // 状态会通过 onAuthStateChange 自动更新
-      } catch (e) {
-        clearAccessToken()
-        setState({ status: 'anonymous' })
-        throw e as AuthApiError
+        const user = await backend.login(input)
+        applyUser(user)
+      } catch (error) {
+        if (mounted.current) setState({ status: 'anonymous' })
+        throw toAuthError(error, '登录失败，请检查邮箱与密码')
       }
     },
-    []
+    [backend, applyUser],
   )
 
   const register = useCallback(
     async (input: { email: string; password: string; username: string }) => {
-      setState({ status: 'loading' })
       try {
-        const { error } = await supabase.auth.signUp({
-          email: input.email,
-          password: input.password,
-          options: {
-            data: {
-              username: input.username
-            }
-          }
-        })
-        
-        if (error) {
-          throw {
-            code: error.code,
-            message: error.message
-          } as AuthApiError
+        const user = await backend.register(input)
+        if (user) {
+          applyUser(user)
+          return true
         }
-        
-        // 注册成功后，状态会通过 onAuthStateChange 自动更新
-      } catch (e) {
-        clearAccessToken()
-        setState({ status: 'anonymous' })
-        throw e as AuthApiError
+        if (mounted.current) setState({ status: 'anonymous' })
+        return false
+      } catch (error) {
+        throw toAuthError(error, '注册失败，请稍后重试')
       }
     },
-    []
+    [backend, applyUser],
   )
 
   const logout = useCallback(async () => {
-    setState({ status: 'loading' })
     try {
-      const { error } = await supabase.auth.signOut()
-      if (error) {
-        throw {
-          code: error.code,
-          message: error.message
-        } as AuthApiError
-      }
-      // 状态会通过 onAuthStateChange 自动更新
-    } catch (e) {
-      clearAccessToken()
-      setState({ status: 'anonymous' })
-      throw e as AuthApiError
+      await backend.logout()
+    } finally {
+      if (mounted.current) setState({ status: 'anonymous' })
     }
-  }, [])
+  }, [backend])
 
-  const changePassword = useCallback(async (input: { currentPassword: string; newPassword: string }) => {
-    try {
-      const { error } = await supabase.auth.updateUser({
-        password: input.newPassword
-      })
-      
-      if (error) {
-        throw {
-          code: error.code,
-          message: error.message
-        } as AuthApiError
+  const changePassword = useCallback(
+    async (input: { currentPassword: string; newPassword: string }) => {
+      try {
+        await backend.changePassword(input)
+      } catch (error) {
+        throw toAuthError(error, '修改密码失败')
       }
-    } catch (e) {
-      throw e as AuthApiError
-    }
-  }, [])
+    },
+    [backend],
+  )
 
-  const forgotPassword = useCallback(async (input: { email: string }) => {
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(input.email, {
-        redirectTo: window.location.origin + '/zhiyueling-si/password/reset'
-      })
-      
-      if (error) {
-        throw {
-          code: error.code,
-          message: error.message
-        } as AuthApiError
+  const forgotPassword = useCallback(
+    async (input: { email: string }) => {
+      try {
+        await backend.forgotPassword(input)
+      } catch (error) {
+        throw toAuthError(error, '发送重置邮件失败')
       }
-    } catch (e) {
-      throw e as AuthApiError
-    }
-  }, [])
+    },
+    [backend],
+  )
 
-  const resetPassword = useCallback(async (input: { token: string; newPassword: string }) => {
-    try {
-      const { error } = await supabase.auth.updateUser({
-        password: input.newPassword
-      })
-      
-      if (error) {
-        throw {
-          code: error.code,
-          message: error.message
-        } as AuthApiError
+  const resetPassword = useCallback(
+    async (input: { newPassword: string }) => {
+      try {
+        await backend.resetPassword(input)
+      } catch (error) {
+        throw toAuthError(error, '重置密码失败，链接可能已过期')
       }
-    } catch (e) {
-      throw e as AuthApiError
+    },
+    [backend],
+  )
+
+  const refreshMe = useCallback(async () => {
+    try {
+      const user = await backend.refresh()
+      if (!user) {
+        if (mounted.current) setState({ status: 'anonymous' })
+        return null
+      }
+      applyUser(user)
+      return user
+    } catch (error) {
+      if (mounted.current) setState({ status: 'anonymous' })
+      throw toAuthError(error, '刷新登录状态失败')
     }
-  }, [])
+  }, [backend, applyUser])
 
   const hasRole = useCallback(
     (role: string) => (state.status === 'authenticated' ? state.user.roles.includes(role as never) : false),
@@ -330,6 +145,7 @@ export function AuthProvider(props: {
   const value = useMemo<AuthContextValue>(
     () => ({
       state,
+      mode: runtimeMode,
       loginWithPassword,
       register,
       logout,
@@ -340,8 +156,9 @@ export function AuthProvider(props: {
       hasRole,
       hasPermission,
     }),
-    [hasPermission, hasRole, loginWithPassword, logout, register, changePassword, forgotPassword, resetPassword, refreshMe, state],
+    [state, loginWithPassword, register, logout, changePassword, forgotPassword, resetPassword, refreshMe, hasRole, hasPermission],
   )
 
   return <AuthContext.Provider value={value}>{props.children}</AuthContext.Provider>
 }
+

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import type { AuthApiError } from '../types'
 import { useAuth } from '..'
 
@@ -122,6 +122,7 @@ export function RegisterPage() {
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const navigate = useNavigate()
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -144,8 +145,14 @@ export function RegisterPage() {
     }
     setSubmitting(true)
     try {
-      await register({ username: username.trim(), email: email.trim(), password })
-      setOk(true)
+      const signedIn = await register({ username: username.trim(), email: email.trim(), password })
+      // 云端模式可能要求邮箱确认：此时没有会话，展示「去邮箱激活」；
+      // 本地演示模式会直接建立会话，注册即登录。
+      if (signedIn) {
+        navigate('/', { replace: true })
+      } else {
+        setOk(true)
+      }
     } catch (err) {
       setError(normalizeError(err))
     } finally {

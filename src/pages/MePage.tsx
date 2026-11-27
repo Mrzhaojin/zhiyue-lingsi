@@ -1,12 +1,15 @@
 import { Link } from 'react-router-dom'
-import { getDbSnapshot, getUnreadNotificationCount, listPublishedNotesByUser } from '../data/db'
+import { getCurrentUser, getDbSnapshot, getUnreadNotificationCount, listPublishedNotesByUser } from '../data/db'
 import { ChevronRightIcon } from '../ui/ChevronRightIcon'
 import { BookOpen, Bookmark, Leaf, Bell, Settings, Shield, MessageSquareText, Sparkles } from 'lucide-react'
 import { useAuth } from '../modules/auth/client'
 
 export function MePage() {
   const { state } = useAuth()
-  const user = state.status === 'authenticated' ? { ...state.user, stats: (state.user as unknown as { stats: { readingMinutes: number; followersCount: number } }).stats || { readingMinutes: 0, followersCount: 0 }, email: (state.user as unknown as { email: string }).email } : { id: '', username: 'Guest', nickname: 'Guest', profileTag: '', bio: '', stats: { readingMinutes: 0, followersCount: 0 }, role: 'user', email: undefined }
+  const authUser = state.status === 'authenticated' ? state.user : null
+  // 内容归属以数据层的当前用户为准：登录成功后 AuthProvider 会把 auth.uid 绑定进来。
+  // 以前这里直接读 Supabase 用户并强转 stats，导致统计恒为 0、内容归属错乱。
+  const user = getCurrentUser()
   const db = getDbSnapshot()
   const myPosts = Object.values(db.posts).filter((p) => p.authorId === user.id).length
   const myNotes = listPublishedNotesByUser(user.id).length
@@ -28,19 +31,19 @@ export function MePage() {
             border: '2px solid #fff',
             boxShadow: 'var(--shadow)'
           }}>
-            {user.username.charAt(0).toUpperCase()}
+            {user.nickname.charAt(0).toUpperCase()}
           </div>
           <div className="profile-main">
             <div className="row space" style={{ gap: '12px', alignItems: 'baseline' }}>
-              <div className="profile-name" style={{ fontSize: '22px', fontWeight: 500 }}>{user.username}</div>
+              <div className="profile-name" style={{ fontSize: '22px', fontWeight: 500 }}>{user.nickname}</div>
               <Link className="mini-action" to="/me/profile" aria-label="编辑个人资料">
                 编辑
               </Link>
             </div>
-            {user.email ? (
+            {authUser?.email ? (
               <div style={{ marginTop: '8px' }}>
                 <span className="chip" style={{ fontSize: '10px', padding: '2px 10px', background: 'var(--accent-bg)', color: 'var(--accent)' }}>
-                  {user.email}
+                  {authUser?.email}
                 </span>
               </div>
             ) : null}

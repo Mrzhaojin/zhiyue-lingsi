@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import type { AuthApiError } from '../types'
 import { useAuth } from '..'
-import { validateEmail, sanitizeInput } from '../../../../lib/security'
+import { validateEmail } from '../../../../lib/security'
+import { runtimeMode } from '../../../../lib/runtimeConfig'
 
 // 添加CSS动画
 const styles = `
@@ -143,24 +144,21 @@ export function LoginPage() {
     e.preventDefault()
     setError(null)
     
-    // 清理输入
-    const sanitizedEmail = sanitizeInput(email.trim())
-    const sanitizedPassword = sanitizeInput(password)
-    
-    if (!sanitizedEmail || !sanitizedPassword) {
+    // 密码必须原样提交：之前用 sanitizeInput 把 & < > ' 转成 HTML 实体，
+    // 而注册端不转义，导致含特殊字符的密码永远登录失败。
+    const emailValue = email.trim()
+    if (!emailValue || !password) {
       setError('请输入邮箱和密码')
       return
     }
-    
-    // 验证邮箱格式
-    if (!validateEmail(sanitizedEmail)) {
+    if (!validateEmail(emailValue)) {
       setError('请输入有效的邮箱地址')
       return
     }
     
     setSubmitting(true)
     try {
-      await loginWithPassword({ email: sanitizedEmail, password: sanitizedPassword, remember })
+      await loginWithPassword({ email: emailValue, password, remember })
       navigate(from, { replace: true })
     } catch (err) {
       setError(normalizeError(err))
@@ -244,6 +242,21 @@ export function LoginPage() {
             borderRadius: 'var(--radius)',
             border: '1px solid var(--border)'
           }}>
+            {runtimeMode === 'local' ? (
+              <div
+                style={{
+                  marginBottom: '20px',
+                  padding: '12px 14px',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'var(--accent-bg)',
+                  color: 'var(--text)',
+                  fontSize: '12px',
+                  lineHeight: 1.6,
+                }}
+              >
+                本地演示模式：无需注册，任意邮箱 + 至少 6 位密码即可进入；数据只保存在当前浏览器。
+              </div>
+            ) : null}
             <h2 className="h2" style={{ 
               textAlign: 'center', 
               marginBottom: '32px',
