@@ -1,4 +1,4 @@
-import type { AITextAnalysis } from '../data/models'
+import type { AITextAnalysis } from '../domain/models'
 
 export async function callDoubaoAPI(prompt: string, systemPrompt?: string, retries = 3): Promise<string> {
   const apiKey = import.meta.env.VITE_DOBAO_API_KEY

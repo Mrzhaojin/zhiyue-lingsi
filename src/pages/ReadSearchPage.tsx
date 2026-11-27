@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { addToShelf, getCurrentUser, isInShelf, removeFromShelf } from '../data/db'
-import type { Book } from '../data/models'
+import type { Book } from '../domain/models'
 import { BookCover } from '../components/BookCover'
 import { aiSearchBooks, speakText, stopSpeak } from '../services/ai'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'

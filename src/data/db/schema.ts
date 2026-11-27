@@ -14,7 +14,7 @@ import type {
   TopicTag,
   User,
   VocabItem,
-} from '../models'
+} from '../../domain/models'
 
 export type Database = {
   version: 4

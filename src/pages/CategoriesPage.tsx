@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { listBooks } from '../data/db'
-import type { BookCategory, ReadingDifficulty } from '../data/models'
+import type { BookCategory, ReadingDifficulty } from '../domain/models'
 import { BookCover } from '../components/BookCover'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
 import { SearchIcon } from '../ui/SearchIcon'

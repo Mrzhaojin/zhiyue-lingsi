@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { Book } from '../data/models'
+import type { Book } from '../domain/models'
 import { resolveBookCoverUrl } from '../data/bookCovers'
 
 type Size = 'xs' | 'sm' | 'md' | 'lg'

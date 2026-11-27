@@ -1,4 +1,4 @@
-import type { Book } from './models'
+import type { Book } from '../domain/models'
 
 export const bookCoverByTitle: Record<string, string> = {
   小王子: '/covers/xiaowangzi.png',

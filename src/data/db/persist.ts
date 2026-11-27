@@ -15,7 +15,7 @@ import type {
   TopicTag,
   User,
   VocabItem,
-} from '../models'
+} from '../../domain/models'
 import { emptyDatabase, normalizeDatabase, type Database, type TableName } from './schema'
 
 export type WriteOp =

@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid'
-import type { Book, Comment, Note, Post, TopicTag, User } from './models'
+import type { Book, Comment, Note, Post, TopicTag, User } from '../domain/models'
 import type { Database } from './db/schema'
 
 function now() {

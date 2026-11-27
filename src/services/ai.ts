@@ -1,4 +1,4 @@
-import type { AITextAnalysis, Book, ReadingDifficulty } from '../data/models'
+import type { AITextAnalysis, Book, ReadingDifficulty } from '../domain/models'
 import { listBooks } from '../data/db'
 import { aiProxyUrl } from '../lib/runtimeConfig'
 

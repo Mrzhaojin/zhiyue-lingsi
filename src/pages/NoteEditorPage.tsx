@@ -11,7 +11,7 @@ import {
   getNote,
   upsertTagByName,
 } from '../data/db'
-import type { NoteTemplate } from '../data/models'
+import type { NoteTemplate } from '../domain/models'
 import { checkContentAllowed } from '../services/keywordFilter'
 import { useToast } from '../ui/useToast'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'

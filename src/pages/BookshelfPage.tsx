@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getBook, getCurrentUser, listShelf, removeFromShelf } from '../data/db'
-import type { Book } from '../data/models'
+import type { Book } from '../domain/models'
 import { resolveBookCoverUrl } from '../data/bookCovers'
 import { useToast } from '../ui/useToast'
 import { Search } from 'lucide-react'

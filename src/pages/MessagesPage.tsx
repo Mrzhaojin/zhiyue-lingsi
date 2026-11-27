@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getCurrentUser, listNotifications, markAllNotificationsRead, markNotificationRead } from '../data/db'
-import type { NotificationType } from '../data/models'
+import type { NotificationType } from '../domain/models'
 import { formatTime } from '../lib/format'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
 import { useToast } from '../ui/useToast'

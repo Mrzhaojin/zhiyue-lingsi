@@ -7,7 +7,7 @@ import {
   importDatabaseJson,
   updateCurrentUser,
 } from '../data/db'
-import type { ThemeMode } from '../data/models'
+import type { ThemeMode } from '../domain/models'
 import { refreshTheme } from '../app/theme'
 import { useToast } from '../ui/useToast'
 import { ChevronLeftIcon } from '../ui/ChevronLeftIcon'
