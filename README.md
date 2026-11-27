@@ -3,7 +3,7 @@
 一个**离线优先**的阅读工作台：阅读器、读书笔记、社区讨论，以及一个基于书库上下文的 AI 阅读助手。
 
 > 这个仓库正在从「前端演示」重构为**可长期维护的应用**：分层边界、数据迁移、错误处理、测试与 CI。
-> 工程约定见 [`docs/ENGINEERING.md`](docs/ENGINEERING.md)，架构见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)，决策见 [`docs/adr/`](docs/adr/)。
+> 工程流程：[需求规格](docs/requirements/REQUIREMENTS.md) → [领域模型](docs/modeling/DOMAIN-MODEL.md) → [架构](docs/ARCHITECTURE.md)；工程约定见 [`docs/ENGINEERING.md`](docs/ENGINEERING.md)，决策见 [`docs/adr/`](docs/adr/)。
 
 ## 快速开始
 
