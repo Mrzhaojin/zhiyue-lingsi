@@ -1,7 +1,7 @@
 # 架构说明（重构进行中）
 
-> 本文描述**目标架构**与**当前进度**。M0 已完成，M1 起逐步替换。
-> 决策理由见 `docs/adr/`，重构前的问题清单见 `analysis/00-总体分析报告.md`。
+> 本文描述**目标架构**与**当前进度**。M0/M1 已完成，M1.5 按设计实施。
+> 流程文档：[需求](../requirements/REQUIREMENTS.md) → [领域模型](../modeling/DOMAIN-MODEL.md) → [设计](../design/)；决策见 [`docs/adr/`](../adr/)，重构前问题清单见 `analysis/00-总体分析报告.md`。
 
 ## 1. 定位
 
@@ -133,3 +133,6 @@ npm run build       # 产物预算：入口 gzip < 200KB（M4 目标）
 | M3 AI | 计划 | BFF、SSE、结构化输出、评测集 |
 | M4 体验 | 计划 | 懒加载、设计系统、a11y、性能 |
 | M5 交付 | 计划 | CI、文档、演示脚本 |
+
+**设计 v1.0 已完成**：物理数据模型与迁移（[DATA-MODEL](../design/DATA-MODEL.md)）、模块与接口契约（[MODULES](../design/MODULES.md)）、RAG（[RAG](../design/RAG.md)）、部署（[DEPLOYMENT](../design/DEPLOYMENT.md)）。
+M1.5 按设计实施：仓储接口 → 页面 hooks → 软删/章节/来源/笔记关联 → 删除旧门面。
