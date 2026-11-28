@@ -9,23 +9,24 @@ do $$
 declare
   r record;
   v_count bigint;
+  v_target text;
 begin
   for r in
     select * from (values
       ('posts', 'author_id'),
-      ('comments', 'content_text'),
-      ('users', 'username')
+      ('comments', 'content_text')
     ) as t(tbl, marker_col)
   loop
     if exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = r.tbl)
        and not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = r.tbl and column_name = r.marker_col)
     then
       execute format('select count(*) from public.%I', r.tbl) into v_count;
-      if v_count > 0 then
-        raise exception '表 % 结构与目标不一致且非空（% 行），请先备份并手动改名', r.tbl, v_count;
+      v_target := 'legacy_' || r.tbl;
+      if exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = v_target) then
+        v_target := v_target || '_' || to_char(now(), 'YYYYMMDDHH24MISS');
       end if;
-      execute format('alter table public.%I rename to %I', r.tbl, 'legacy_' || r.tbl);
-      raise notice '已把模板表 % 改名为 legacy_%（空表）', r.tbl, r.tbl;
+      execute format('alter table public.%I rename to %I', r.tbl, v_target);
+      raise notice '模板表 % 已改名为 %（% 行，数据保留）', r.tbl, v_target, v_count;
     end if;
   end loop;
 end $$;

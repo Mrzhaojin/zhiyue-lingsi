@@ -70,4 +70,35 @@ describe('云端 SQL 迁移（PGlite 真实执行）', () => {
     const reconciled = await db.query('select public.reconcile_counters() as fixed')
     expect(Number(rowsOf(reconciled)[0].fixed)).toBeGreaterThanOrEqual(0)
   })
+
+  it('迁移可重复执行（幂等）', async () => {
+    const db = new PGlite()
+    await db.exec(PRELUDE)
+    await db.exec(SQL)
+    await db.exec(SQL)
+    const tables = await db.query("select count(*)::int as count from information_schema.tables where table_schema='public'")
+    expect(Number(rowsOf(tables)[0].count)).toBeGreaterThan(10)
+    const chapters = await db.query("select count(*)::int as count from information_schema.tables where table_schema='public' and table_name='chapters'")
+    expect(Number(rowsOf(chapters)[0].count)).toBe(1)
+  })
+
+  it('模板表非空时自动改名，数据不丢', async () => {
+    const db = new PGlite()
+    await db.exec(PRELUDE)
+    await db.exec(`
+      create table public.posts (id uuid primary key default gen_random_uuid(), title text, body text, created_at timestamptz default now());
+      insert into public.posts (title, body) select 'template-' || g, 'body' from generate_series(1, 5) g;
+      create table public.comments (id uuid primary key default gen_random_uuid(), post_id uuid, content text);
+    `)
+    await db.exec(SQL)
+
+    const legacyPosts = await db.query('select count(*)::int as count from public.legacy_posts')
+    expect(Number(rowsOf(legacyPosts)[0].count)).toBe(5)
+
+    const legacyComments = await db.query("select table_name from information_schema.tables where table_schema='public' and table_name='legacy_comments'")
+    expect(rowsOf(legacyComments)).toHaveLength(1)
+
+    const authorColumn = await db.query("select column_name from information_schema.columns where table_schema='public' and table_name='posts' and column_name='author_id'")
+    expect(rowsOf(authorColumn)).toHaveLength(1)
+  })
 })
