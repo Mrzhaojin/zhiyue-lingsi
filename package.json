@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "verify": "npm run typecheck && npm run lint && npm test && npm run build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify:cloud": "node scripts/verify-cloud.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.0",
