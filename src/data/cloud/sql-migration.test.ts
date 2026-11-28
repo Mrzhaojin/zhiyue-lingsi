@@ -7,6 +7,7 @@ type AnyRow = Record<string, unknown>
 const rowsOf = (result: { rows: unknown[] }): AnyRow[] => result.rows as AnyRow[]
 
 const SQL = readFileSync('supabase/all-in-one.sql', 'utf8').replace(/create extension if not exists pgcrypto;/i, '')
+const SEED = readFileSync('supabase/seed.sql', 'utf8')
 
 const PRELUDE = `
 create schema if not exists auth;
@@ -69,6 +70,18 @@ describe('云端 SQL 迁移（PGlite 真实执行）', () => {
     await db.exec('set role authenticated')
     const reconciled = await db.query('select public.reconcile_counters() as fixed')
     expect(Number(rowsOf(reconciled)[0].fixed)).toBeGreaterThanOrEqual(0)
+  })
+
+  it('seed.sql 可在迁移后执行', async () => {
+    const db = new PGlite()
+    await db.exec(PRELUDE)
+    await db.exec(SQL)
+    await db.exec(SEED)
+    await db.exec(SEED)
+    const books = await db.query('select count(*)::int as count from public.books')
+    const chapters = await db.query('select count(*)::int as count from public.chapters')
+    expect(Number(rowsOf(books)[0].count)).toBe(3)
+    expect(Number(rowsOf(chapters)[0].count)).toBe(3)
   })
 
   it('迁移可重复执行（幂等）', async () => {

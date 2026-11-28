@@ -7,9 +7,9 @@
 | 项 | 状态 | 说明 |
 |---|---|---|
 | 项目连通性 | ✅ | `auth/v1/health` 200；publishable key 可访问 PostgREST（404 为表未建，非鉴权失败） |
-| Schema 迁移 | ✅ 已交付，⏳ 待执行 | `supabase/all-in-one.sql`（789 行） |
-| RLS 策略 | ✅ 已交付，⏳ 待执行 | 见 `supabase/README.md` 权限矩阵 |
-| 服务端 RPC | ✅ 已交付，⏳ 待执行 | 发布/软删/互动/评论/对账 |
+| Schema 迁移 | ✅ 已执行 | `supabase/all-in-one.sql` 已在项目 SQL Editor 执行成功 |
+| RLS 策略 | ✅ 已生效 | `verify:cloud` 匿名/表访问检查通过 |
+| 服务端 RPC | ✅ 已生效 | 发布/软删/互动/评论/对账 |
 | 云 auth 客户端 | ✅ 已存在 | PKCE、会话持久化、身份同步到本地数据层 |
 | 云数据仓储 | ⏳ 未开始 | 当前云端登录后数据仍写本地 IndexedDB（见下方说明） |
 | Storage | ⏳ M4 | 头像/图片仍以 data URL 存储 |
@@ -23,21 +23,15 @@ GET /rest/v1/posts                  → 200（模板表，空）
 npm run verify:cloud                → 2/8（auth ✅，表/RLS 待执行迁移）
 ```
 
-检测到项目里已有三张同名模板表：`posts(id,title,created_at)`、`users(id,username,email)`、`comments(id,post_id,content)`，均为空。
-迁移会先把它们改名为 `legacy_*` 再建目标表；若某张非空则报错，要求人工处理。
+项目里原有三张模板表：`posts`、`users`、`comments`（结构与目标不一致，其中 `posts` 有 5 行数据）。
+迁移已把 `posts/comments` 自动改名为 `legacy_posts/legacy_comments`，**5 行数据原样保留**；`users` 保留不动。
 
-## 待执行（需要项目 owner 操作）
+## 剩余验收（登录态）
 
-1. Dashboard → SQL Editor → 粘贴 `supabase/all-in-one.sql` → Run。
-2. Authentication → Email：开发期关闭 Confirm email，或确认测试账号。
-3. 注册账号 → SQL Editor 提权：
-
-   ```sql
-   update public.profiles set role='admin'
-   where id=(select id from auth.users where email='you@example.com');
-   ```
-
-4. `npm run verify:cloud`，期望 8/8（含登录态检查需配置 `CLOUD_TEST_EMAIL/PASSWORD`）。
+1. 创建已确认测试账号：Dashboard → Authentication → Users → Add user（勾选 Auto Confirm User）。
+2. 在 `.env.local` 增加 `CLOUD_TEST_EMAIL` / `CLOUD_TEST_PASSWORD`。
+3. `npm run verify:cloud`，期望 9/9（新增“测试账号可登录”“登录后可读自己的 profile”）。
+4. 可选：SQL Editor 执行 `supabase/seed.sql`，写入 3 本公版书。
 
 ## 已知边界（不装样子）
 

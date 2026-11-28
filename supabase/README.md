@@ -11,6 +11,7 @@
 | `migrations/0003_rpc.sql` | 发布、软删/恢复、互动、评论、浏览数、计数对账等服务端函数 |
 | `all-in-one.sql` | 上面三个文件的合并版，供 Dashboard 一次性粘贴 |
 | `../scripts/verify-cloud.mjs` | 只读验证：连通性、表是否存在、匿名 RLS、登录态 profile |
+| `seed.sql` | 公版书种子（可重复执行） |
 
 ## 应用步骤
 
@@ -35,7 +36,9 @@
    where id = (select id from auth.users where email = 'you@example.com');
    ```
 
-6. 验证：
+6. 可选：执行 `supabase/seed.sql`，写入 3 本公版书（红楼梦 / The Great Gatsby / 狂人日记），用于云端演示。
+
+7. 验证：
 
    ```bash
    npm run verify:cloud
