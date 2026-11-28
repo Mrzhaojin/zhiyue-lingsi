@@ -11,7 +11,8 @@
     "test": "vitest run",
     "verify": "npm run typecheck && npm run lint && npm test && npm run build",
     "preview": "vite preview",
-    "verify:cloud": "node scripts/verify-cloud.mjs"
+    "verify:cloud": "node scripts/verify-cloud.mjs",
+    "check:sql": "node scripts/check-sql.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.0",
@@ -26,6 +27,7 @@
     "react-router-dom": "^7.13.2"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.6.1",
     "@eslint/js": "^9.39.4",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",

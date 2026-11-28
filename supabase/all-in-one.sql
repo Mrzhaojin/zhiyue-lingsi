@@ -12,7 +12,7 @@ create extension if not exists pgcrypto;
 
 -- 兼容项目里已有的模板表（posts/users/comments 结构与目标不一致）：
 -- 仅在空表时自动改名为 legacy_*，非空则直接报错要求人工处理，避免误删数据。
-do $
+do $$
 declare
   r record;
   v_count bigint;
@@ -35,7 +35,7 @@ begin
       raise notice '已把模板表 % 改名为 legacy_%（空表）', r.tbl, r.tbl;
     end if;
   end loop;
-end $;
+end $$;
 create or replace function public.touch_updated_at() returns trigger
 language plpgsql as $$
 begin
@@ -316,6 +316,10 @@ begin
   if auth.uid() is null then
     return new;
   end if;
+  -- security definer 函数写统计前会打开这个事务级开关；普通客户端请求没有该开关。
+  if current_setting('app.internal_profile_write', true) = 'on' then
+    return new;
+  end if;
   if not public.is_admin() then
     if new.role is distinct from old.role then
       raise exception 'role 只能由管理员修改';
@@ -508,7 +512,8 @@ create policy analyses_own on public.ai_analysis_records for all
 -- ---------- 后台配置：公共可读，管理员写 ----------
 drop policy if exists admin_config_select on public.admin_config;
 create policy admin_config_select on public.admin_config for select using (true);
-drop policy if exists admin_config_write on public.admin_config for all
+drop policy if exists admin_config_write on public.admin_config;
+create policy admin_config_write on public.admin_config for all
   using (public.is_admin()) with check (public.is_admin());
 
 -- 函数执行权限
@@ -524,6 +529,7 @@ begin
   if p_field not in ('postsCount','notesCount') then
     raise exception '非法统计字段: %', p_field;
   end if;
+  perform set_config('app.internal_profile_write', 'on', true);
   update public.profiles
   set stats = jsonb_set(
     stats,
@@ -531,6 +537,7 @@ begin
     to_jsonb(greatest(0, coalesce((stats->>p_field)::int, 0) + p_delta))
   )
   where id = p_user;
+  perform set_config('app.internal_profile_write', 'off', true);
 end $$;
 
 create or replace function public.publish_note(p_note_id text) returns text

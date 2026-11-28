@@ -36,6 +36,10 @@ begin
   if auth.uid() is null then
     return new;
   end if;
+  -- security definer 函数写统计前会打开这个事务级开关；普通客户端请求没有该开关。
+  if current_setting('app.internal_profile_write', true) = 'on' then
+    return new;
+  end if;
   if not public.is_admin() then
     if new.role is distinct from old.role then
       raise exception 'role 只能由管理员修改';
@@ -228,7 +232,8 @@ create policy analyses_own on public.ai_analysis_records for all
 -- ---------- 后台配置：公共可读，管理员写 ----------
 drop policy if exists admin_config_select on public.admin_config;
 create policy admin_config_select on public.admin_config for select using (true);
-drop policy if exists admin_config_write on public.admin_config for all
+drop policy if exists admin_config_write on public.admin_config;
+create policy admin_config_write on public.admin_config for all
   using (public.is_admin()) with check (public.is_admin());
 
 -- 函数执行权限

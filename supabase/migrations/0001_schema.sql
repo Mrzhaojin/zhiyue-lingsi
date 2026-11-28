@@ -5,7 +5,7 @@ create extension if not exists pgcrypto;
 
 -- 兼容项目里已有的模板表（posts/users/comments 结构与目标不一致）：
 -- 仅在空表时自动改名为 legacy_*，非空则直接报错要求人工处理，避免误删数据。
-do $
+do $$
 declare
   r record;
   v_count bigint;
@@ -28,7 +28,7 @@ begin
       raise notice '已把模板表 % 改名为 legacy_%（空表）', r.tbl, r.tbl;
     end if;
   end loop;
-end $;
+end $$;
 create or replace function public.touch_updated_at() returns trigger
 language plpgsql as $$
 begin

@@ -7,6 +7,7 @@ begin
   if p_field not in ('postsCount','notesCount') then
     raise exception '非法统计字段: %', p_field;
   end if;
+  perform set_config('app.internal_profile_write', 'on', true);
   update public.profiles
   set stats = jsonb_set(
     stats,
@@ -14,6 +15,7 @@ begin
     to_jsonb(greatest(0, coalesce((stats->>p_field)::int, 0) + p_delta))
   )
   where id = p_user;
+  perform set_config('app.internal_profile_write', 'off', true);
 end $$;
 
 create or replace function public.publish_note(p_note_id text) returns text
